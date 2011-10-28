@@ -1,0 +1,80 @@
+===============================================================================
+The BasicHLSL11 Example
+===============================================================================
+
+This example renders a single model with a fixed vertex- and fragment-shading
+effect. The HLSL code is in BasicHLSL11_{VS,PS}.hlsl, while the Spark shader
+code is in BasicSpark11.spark.
+
+This example defines a single shader class BasicSpark11 which is compiled
+offline to generate shader bytecode and C++ wrappers. No runtime shader
+compilation or parameter reflection is performed when using Spark in
+this example.
+
+A detailed walkthrough of the Spark code for this example can be found
+in the Spark User's Guide.
+
+Known Issues:
+  - The Spark code path for this example uses a single constant buffer,
+    while the HLSL code uses two
+
+===============================================================================
+The CubeMapGS Example
+===============================================================================
+
+This example shows several techniques for performing render-to-cube-map:
+
+- Ordinary multipass rendering (6 rendering passes)
+- Primitive replication in a Geometry Shader
+- Replication by using instancing in the Input Assembler stage
+- Replication by using instancing in the Geometry Shader stage
+
+For each technique, we provide both an implementation as a Spark shader
+class, and as an HLSL Effect (the original DirectX SDK sample used the Effect
+framework).
+
+Known Issues:
+  - For current hardware, the multipass technique is much faster than any
+    of the more "clever" GS-based approaches. This weakness is not specific
+    to Spark, but affects many algorithms that could otherwise make use
+    of the Geometry Shader pipeline stage.
+
+===============================================================================
+The PNTriangles11 Example
+===============================================================================
+
+This example demonstrates more complicated usage of Spark. The HLSL shader
+code in {AdaptiveTessellation, PNTriangles}.hlsl is parameterized by a
+number of preprocessor definitions (i.e., it is an uber-shader), and the C++
+application re-compiles the shader code when various parameters are changed.
+
+The Spark code for this example separates out the shader code into several
+modules:
+
+- Base defines the core rendering effect: transforming positions/normals
+  and performing basic diffuse shading.
+- Texturing extends this effect to use a diffuse texture map
+- PNTriangles implements the core of the PN Triangle tessellation scheme.
+- AdaptiveTessellation implements the common code shared between several
+  adaptive tessellation schemes: ScreenSpace_, Distance_,  ScreenResolution_,
+  and Orientation_.
+- ViewFrustumCulling and BackFaceCulling implement two patch-granularity
+  culling schemes.
+
+The C++ code for this example uses the Spark runtime to dynamically compose
+a subset of these shader classes based on the configuration of the UI,
+generating new pipeline configurations on the fly.
+
+Known Issues:
+  - When using the two patch-granularity culling techiques, an issue has been
+    noticed where the Spark rendering path produces incorrect results when
+    toggling between HLSL and Spark. This occurs on some AMD graphics cards,
+    even with up-to-date drivers, but does not occur under refrast.
+  - The screen-space adaptive scheme requires a #pragma on the HLSL code path
+    to work around a bug in the June 2010 SDK version of the HLSL compiler.
+  - Using the orientation-adaptive scheme produces different results between
+    HLSL and Spark. This is because the way this effect composes with the
+    other schemes is highly non-orthogonal, and was difficult to model cleanly
+    in Spark.
+
+

@@ -1,0 +1,610 @@
+// Copyright 2011 Intel Corporation
+// All Rights Reserved
+//
+// Permission is granted to use, copy, distribute and prepare derivative works of this
+// software for any purpose and without fee, provided, that the above copyright notice
+// and this statement appear in all copies.  Intel makes no representations about the
+// suitability of this software for any purpose.  THIS SOFTWARE IS PROVIDED "AS IS."
+// INTEL SPECIFICALLY DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, AND ALL LIABILITY,
+// INCLUDING CONSEQUENTIAL AND OTHER INDIRECT DAMAGES, FOR THE USE OF THIS SOFTWARE,
+// INCLUDING LIABILITY FOR INFRINGEMENT OF ANY PROPRIETARY RIGHTS, AND INCLUDING THE
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  Intel does not
+// assume any responsibility for any errors which may appear in this software nor any
+// responsibility to update it.
+
+// CubeMapGS.spark
+
+//
+// Common code for all the effects.
+//
+// This class defines the shader parameters use by the various effects.
+//
+abstract shader class Base extends D3D11DrawPass
+{
+//--------------------------------------------------------------------------------------
+// per-frame @Uniforms
+//--------------------------------------------------------------------------------------
+
+    input @Uniform float4x4 world;
+    input @Uniform float4x4 view;
+    input @Uniform float4x4 proj;
+
+    // Rather than define shader input parameters for the world-view
+    // and world-view-projection matrices, we just define them here
+    // as (non-input) @Uniform attributes.
+    //
+    // This approach avoids coupling shader and application code,
+    // since the application doesn't have to know if the shader
+    // needs various composed, transposed, or inverse matrices.
+    //
+    @Uniform float4x4 worldView = mul( world, view );
+    @Uniform float4x4 worldViewProj = mul( worldView, proj );
+
+    input @Uniform float3 eyePosition;  // Eye point in world space
+
+//--------------------------------------------------------------------------------------
+// per-material @Uniforms
+//--------------------------------------------------------------------------------------
+
+    input @Uniform float4 materialDiff;
+    input @Uniform float4 materialSpec;
+
+//--------------------------------------------------------------------------------------
+// render-to-cube-map @Uniforms
+//--------------------------------------------------------------------------------------
+
+    input @Uniform Array[float4x4,6] viewCM; // View matrices for cube map rendering
+
+//--------------------------------------------------------------------------------------
+// miscellaneous @Constants
+//--------------------------------------------------------------------------------------
+
+    @Constant float IOR = 2.5f;
+    @Constant float fReflectivity = 1.0f;
+    @Constant float3 skyDir = float3( 0.0,1.0,0.0 );
+    @Constant float R0Constant = ((1.0- (1.0/IOR) )*(1.0- (1.0/IOR) ))/((1.0+ (1.0/IOR) )*(1.0+ (1.0/IOR) ));
+    @Constant float R0Inv = 1.0 - ((1.0- (1.0/IOR) )*(1.0- (1.0/IOR) ))/((1.0+ (1.0/IOR) )*(1.0+ (1.0/IOR) ));
+    @Constant float4 vFrontColor = float4( 0.3, 0.1, 0.6, 1.0 );
+    @Constant float4 vBackColor = float4(  0.0, 0.3, 0.3, 1.0 );
+    @Constant float4 vHighlight1 = float4( 0.9, 0.8, 0.9, 1.0 );
+    @Constant float4 vHighlight2 = float4( 1.0, 1.0, 0.6, 1.0 );
+    @Constant float lightMul = 3.0;
+    @Constant float4 vOne = float4( 1,1,1,1 );
+
+//--------------------------------------------------------------------------------------
+// shader resources
+//--------------------------------------------------------------------------------------
+
+    input @Uniform Texture2D[float4] txDiffuse;
+    input @Uniform Texture2D[float4] txFalloff;  // falloff texture for diffuse color shifting
+    input @Uniform TextureCube[float4] txEnvMap;
+    input @Uniform Texture2D[float4] txVisual;
+
+    @Uniform SamplerState samLinear = SamplerState( filter: D3D11_FILTER_MIN_MAG_MIP_LINEAR, address: D3D11_TEXTURE_ADDRESS_WRAP );
+    @Uniform SamplerState samPoint = SamplerState( filter: D3D11_FILTER_MIN_MAG_MIP_POINT, address: D3D11_TEXTURE_ADDRESS_CLAMP );
+    @Uniform SamplerState samCube = SamplerState( filter: D3D11_FILTER_ANISOTROPIC, address: D3D11_TEXTURE_ADDRESS_CLAMP );
+
+//--------------------------------------------------------------------------------------
+// @AssembledVertex
+//--------------------------------------------------------------------------------------
+
+    struct PNU
+    {
+        float3 position;
+        float3 normal;
+        float2 texCoord;
+    }
+
+    input @Uniform VertexStream[PNU] vertexStream;
+    input @Uniform DrawSpan drawSpan;
+
+    @AssembledVertex PNU vertex = vertexStream( IA_VertexID );
+    @AssembledVertex float3 P_model = vertex.position;
+    @AssembledVertex float3 N_model = vertex.normal;
+    @AssembledVertex float2 texCoord = vertex.texCoord;
+
+    override IA_DrawSpan = drawSpan;
+
+//--------------------------------------------------------------------------------------
+// @Pixel
+//--------------------------------------------------------------------------------------
+
+    abstract output @Pixel float4 target;
+}
+
+//
+// Common code for all render-to-cube-map passes.
+//
+abstract shader class RenderToCubeMapBase extends Base, D3D11GeometryShader
+{
+//--------------------------------------------------------------------------------------
+// @CoarseVertex
+//--------------------------------------------------------------------------------------
+
+    @CoarseVertex float3 P_world = mul( float4(P_model,1), float4x3(world) );
+    @CoarseVertex float3 N_world = normalize( mul( N_model, float3x3(world) ) );
+
+//--------------------------------------------------------------------------------------
+// @FineVertex
+//--------------------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------------
+// Geometry Shader
+//--------------------------------------------------------------------------------------
+
+    // We are always taking one triangle as input.
+    override GS_InputVertexCount = 3;
+
+//--------------------------------------------------------------------------------------
+// @RasterVertex
+//--------------------------------------------------------------------------------------
+
+    // For every vertex we want to rasterize, we need to know which
+    // cube-map face it will be rendered into, as well as have
+    // an associated FineVertex that can give us the rest of its
+    // attributes:
+    input @RasterVertex uint cubeMapFaceIndex;
+    input @RasterVertex FineVertex fineVertex;
+
+    // To plumb those attributes from fine to raster vertices, we
+    // just project them out of the 'fineVertex' input attribute.
+    override @RasterVertex T FineToRaster[type T]( @FineVertex T value )
+    {
+        return value @ fineVertex;
+    }
+
+    // Each of the render-to-cube-map techniques is going to need
+    // to define the projected vertex position.
+    abstract @RasterVertex float4 P_proj;
+
+    override RS_Position = P_proj;
+    override RS_RenderTargetArrayIndex = cubeMapFaceIndex;
+
+
+//--------------------------------------------------------------------------------------
+// @Fragment
+//--------------------------------------------------------------------------------------
+
+    @Fragment float4 color = Sample( txDiffuse, samLinear, texCoord );
+
+//--------------------------------------------------------------------------------------
+// @Pixel
+//--------------------------------------------------------------------------------------
+
+    override target = color;
+}
+
+//
+// Render into cube map using a loop in a Geometry Shader.
+//
+// This is a pretty straightforward approach: every invocation
+// of the GS outputs the primitive 6 times.
+//
+shader class RenderCubeMapSpark extends RenderToCubeMapBase
+{
+//--------------------------------------------------------------------------------------
+// Geometry Shader
+//--------------------------------------------------------------------------------------
+
+    override GS_MaxOutputVertexCount = 18;
+
+    override @GeometryOutput void GeometryShader()
+    {
+        for( f in Range(0, 6) )
+        {
+            for( v in Range(0,3) )
+            {
+                Append( GS_OutputStream, RasterVertex( fineVertex: GS_InputVertices(v), cubeMapFaceIndex: uint(f) ) );
+            }
+            RestartStrip( GS_OutputStream );
+        }
+    }
+
+//--------------------------------------------------------------------------------------
+// @RasterVertex
+//--------------------------------------------------------------------------------------
+
+    // Our projection math has to go in the GS stage, since we don't know which
+    // cube-map-face to use until then.
+    @RasterVertex float3 P_view = mul( float4(P_world,1), viewCM(cubeMapFaceIndex) ).xyz;
+    override P_proj = mul( float4(P_view,1), proj );
+}
+
+//
+// Render into cube map using IA instancing.
+//
+// This approach relies on an instanced DrawSpan coming from the app,
+// and draws each instance into a different face of the cube-map.
+//
+shader class RenderCubeMapInstSpark extends RenderToCubeMapBase, D3D11NullTessellation
+{
+//--------------------------------------------------------------------------------------
+// @CoarseVertex
+//--------------------------------------------------------------------------------------
+
+    // We will render into a cube-map face according to the instance ID
+    @CoarseVertex uint cubeMapFaceIndex_cv = VS_InstanceID;
+
+    @CoarseVertex float3 P_view = mul( float4(P_world,1), viewCM(cubeMapFaceIndex_cv) ).xyz;
+
+    // Because we are instancing earlier in the pipeline, we can project
+    // our vertices in the VS stage, rather than waiting until the GS.
+    @CoarseVertex float4 P_proj_cv = mul( float4(P_view,1), proj );
+
+//--------------------------------------------------------------------------------------
+// @FineVertex
+//--------------------------------------------------------------------------------------
+
+    // Right now Spark has a limitation that when projecting out an attribute,
+    // the target of the plumbing operation needs to have exactly the record
+    // type of the corresponding attribute.
+    //
+    // As such, we need to have an @FineVertex attribute if we are to project
+    // out of a FineVertex.
+    //
+    // A future release of the compiler will fix this.
+    //
+    @FineVertex uint cubeMapFaceIndex_fv = cubeMapFaceIndex_cv;
+
+//--------------------------------------------------------------------------------------
+// Geometry Shader
+//--------------------------------------------------------------------------------------
+
+    override GS_MaxOutputVertexCount = 3;
+
+    override @GeometryOutput void GeometryShader()
+    {
+        for( v in Range(0,3) )
+        {
+            @GeometryOutput FineVertex fv = GS_InputVertices(v);
+            Append( GS_OutputStream, RasterVertex( fineVertex: fv, cubeMapFaceIndex: cubeMapFaceIndex_fv @ fv  ) );
+        }
+    }
+
+//--------------------------------------------------------------------------------------
+// @RasterVertex
+//--------------------------------------------------------------------------------------
+
+    override P_proj = P_proj_cv;
+}
+
+
+//
+// Render into cube map using GS instancing.
+//
+shader class RenderCubeMapGSInstSpark extends RenderToCubeMapBase, D3D11NullTessellation
+{
+//--------------------------------------------------------------------------------------
+// Geometry Shader
+//--------------------------------------------------------------------------------------
+
+    override GS_MaxOutputVertexCount = 3;
+    override GS_InstanceCount = 6;
+
+    override @GeometryOutput void GeometryShader()
+    {
+        for( v in Range(0,3) )
+        {
+            @GeometryOutput FineVertex fv = GS_InputVertices(v);
+            Append( GS_OutputStream, RasterVertex( fineVertex: fv, cubeMapFaceIndex: GS_InstanceID ) );
+        }
+    }
+
+//--------------------------------------------------------------------------------------
+// @RasterVertex
+//--------------------------------------------------------------------------------------
+
+    @RasterVertex float3 P_view = mul( float4(P_world,1), viewCM(cubeMapFaceIndex) ).xyz;
+    override P_proj = mul( float4(P_view,1), proj );
+}
+
+
+
+//
+// Render the "ordinary" parts of the scene.
+//
+// This is basically a material for static texture-mapped models with no lighting.
+//
+shader class RenderSceneSpark extends Base
+{
+//--------------------------------------------------------------------------------------
+// @CoarseVertex
+//--------------------------------------------------------------------------------------
+
+    @CoarseVertex float4 P_proj = mul( float4(P_model,1), worldViewProj );
+
+//--------------------------------------------------------------------------------------
+// @RasterVertex
+//--------------------------------------------------------------------------------------
+
+    override RS_Position = P_proj;
+
+//--------------------------------------------------------------------------------------
+// @Fragment
+//--------------------------------------------------------------------------------------
+
+    @Fragment float4 color = Sample( txDiffuse, samLinear, texCoord );
+
+//--------------------------------------------------------------------------------------
+// @Pixel
+//--------------------------------------------------------------------------------------
+
+    override target = color;
+}
+
+//
+// Base class for all the effects that render environment-mapped surfaces.
+//
+// This class defines the GS-based effect used to perform higher-order
+// interpolation of normals, along with some common code shared by
+// the various materials.
+//
+abstract shader class RenderEnvMappedSceneBase extends Base, D3D11GeometryShader
+{
+//--------------------------------------------------------------------------------------
+// @CoarseVertex
+//--------------------------------------------------------------------------------------
+
+    @CoarseVertex float3 P_world = mul( float4(P_model,1), float4x3(world) );
+    @CoarseVertex float3 P_view = mul( float4(P_model,1), float4x3(worldView) );
+    @CoarseVertex float4 P_proj = mul( float4(P_model,1), worldViewProj );
+
+//--------------------------------------------------------------------------------------
+// Geometry Shader
+//--------------------------------------------------------------------------------------
+
+    override GS_InputVertexCount = 3;
+    override GS_MaxOutputVertexCount = 3;
+
+    //
+    // This is a very simple pass-through Geometry Shader.
+    // We give each RasterVertex create access to the corresponding
+    // input FineVertex, as well as a barycentric coordinate.
+    //
+    override @GeometryOutput void GeometryShader()
+    {
+        @GeometryInput FineVertex fv0 = GS_InputVertices(0);
+        @GeometryInput FineVertex fv1 = GS_InputVertices(1);
+        @GeometryInput FineVertex fv2 = GS_InputVertices(2);
+
+        Append( GS_OutputStream, RasterVertex( fineVertex: fv0, bary: float2(0,0) ) );
+        Append( GS_OutputStream, RasterVertex( fineVertex: fv1, bary: float2(1,0) ) );
+        Append( GS_OutputStream, RasterVertex( fineVertex: fv2, bary: float2(0,1) ) );
+    }
+
+//--------------------------------------------------------------------------------------
+// @RasterVertex
+//--------------------------------------------------------------------------------------
+
+    // RasterVertex input attributes:
+    input @RasterVertex FineVertex fineVertex;
+    input @RasterVertex float2 bary;
+
+    //
+    // To plumb an attribute 'value' from fine vertices to raster vertices
+    // we simply need to project the value of the attribute out of
+    // the input @RasterVertex attribute 'fineVertex'.
+    //
+    override @RasterVertex T FineToRaster[type T]( @FineVertex T value )
+    {
+        return value @ fineVertex;
+    }
+
+    override RS_Position = P_proj;
+
+    //
+    // By default, any @FineVertex attribute will be plumbed to
+    // the @Fragment rate by first using the (implicit) FineToRaster
+    // plumbing operator above, and then implicit plumbing from
+    // @RasterVertex to @Fragment, which uses perspective-correct
+    // linear interpolation.
+    //
+    // For the environment-map lookups, though, we want smoother
+    // interpolation of normals, to avoid visible discontinuities
+    // at triangle edges.
+    //
+    // Rather than express this interpolation logic directly
+    // in the main shader logic, we demonstrate how Spark allows
+    // the high-order interpolation to be expressed as a reusable
+    // plumbing operator.
+    //
+    @Fragment float3 HighOrderInterpolate( @FineVertex float3 value )
+    {
+        //
+        // The interpolation scheme relies on computing 6 values per
+        // primitive, which will then be interpolated per-fragment
+        // using quadratic barycentric interpolation.
+        // 
+        // The first three values are just the values of the attribute
+        // at each of the primitive's corners:
+        //
+        @RasterVertex float3 value0 = value @ GS_InputVertices(0);
+        @RasterVertex float3 value2 = value @ GS_InputVertices(1);
+        @RasterVertex float3 value4 = value @ GS_InputVertices(2);
+        //
+        // Next, we compute a pairwise-averaged value at the midpoint
+        // of each edge. Since we are interpolating unit vectors here,
+        // we normalize them.
+        //
+        @RasterVertex float3 value1 = normalize( value0 + value2 );
+        @RasterVertex float3 value3 = normalize( value4 + value0 );
+        @RasterVertex float3 value5 = normalize( value2 + value4 );
+
+        //
+        // Once we've set up the values above, we compute the interpolation
+        // weights per-fragment and combine the values.
+        //
+        @Fragment float x = bary.x;
+        @Fragment float y = bary.y;
+        @Fragment float p0 = 2*x*x + 2*y*y + 4*x*y - 3*x - 3*y + 1;
+        @Fragment float p1 = -4*x*x - 4*x*y + 4*x;
+        @Fragment float p2 = 2*x*x - x;
+        @Fragment float p3 = -4*y*y - 4*x*y + 4*y;
+        @Fragment float p4 = 2*y*y - y;
+        @Fragment float p5 = 4*x*y;
+
+        @Fragment float3 result =
+              p0*value0
+            + p1*value1
+            + p2*value2
+            + p3*value3
+            + p4*value4
+            + p5*value5;
+        return result;
+    }
+
+//--------------------------------------------------------------------------------------
+// @Fragment
+//--------------------------------------------------------------------------------------
+
+    //
+    // Here we define some methods for use in per-fragment computation.
+    // These methods are only meant to be used in fragment shading
+    // (for example, they use implicit-derivative texture fetches), and
+    // so they are marked as having @Fragment inputs and outputs.
+    //
+    // Such "single-rate" methods aren't technically conversion operators.
+    //
+    @Fragment float4 ColorApprox( @Fragment float3 incident, @Fragment float3 normal )
+    {
+        float d = saturate( dot(incident,normal)-0.01 );
+        float Ramp = Sample( txFalloff, samPoint, float2(d,0) ).x;
+        d = d*Ramp;
+
+        return vFrontColor*(d) + vBackColor*(1.0-d);
+    }
+
+    @Fragment float FresnelApprox( @Fragment float3 incident, @Fragment float3 normal )
+    {
+         return R0Constant + R0Inv * pow( 1.0-dot(incident,normal),5.0 );
+    }
+
+    //
+    // Here we use our high-order interpolation operator to plumb
+    // the model-space normal from vertices to fragments.
+    //
+    @Fragment float3 N_model_interp = HighOrderInterpolate( N_model );
+    //
+    // We then use the interpolated normal to compute high-quality
+    // world- and view-space normals for shading.
+    //
+    @Fragment float3 N_world = mul( N_model_interp, float3x3(world) );
+    @Fragment float3 N_view  = mul( N_model_interp, float3x3(worldView) );
+
+    //
+    // All of the environment-mapped materials require that we
+    // sample the environment map along a reflection vecotr, so
+    // we put that logic here in the base class.
+    //
+    @Fragment float3 I_world = P_world - eyePosition;
+    @Fragment float3 wR = I_world - 2.0f * dot( I_world, N_world ) * N_world;
+    @Fragment float4 CubeSample = Sample( txEnvMap, samCube, wR );
+
+    //
+    // The subclasses, however, compute the final fragment color
+    // differently, so we set it up as an 'abstract' attribute.
+    //
+    abstract @Fragment float4 color;
+
+//--------------------------------------------------------------------------------------
+// @Pixel
+//--------------------------------------------------------------------------------------
+
+    override target = color;
+}
+
+//
+// Render environment-mapped surface with two-layer paint material.
+// Corresponds to the HLSL effect "RenderEnvMappedScene"
+//
+// This effect computes a complex illumination model for a two-layer
+// car paint, based on several constants defined in the shader file.
+//
+shader class RenderEnvMappedCarSpark extends RenderEnvMappedSceneBase
+{
+//--------------------------------------------------------------------------------------
+// @Fragment
+//--------------------------------------------------------------------------------------
+
+    @Fragment float4 Diff = ColorApprox( float3(0,0,-1), N_view );
+    @Fragment float4 Shellac = float4(FresnelApprox( float3(0,0,-1), N_view ));
+    
+     // Compute Specular for the Diffuse and Shellac layers of paint in view space
+    @Fragment float3 L = skyDir;
+    @Fragment float3 wvSHV = normalize(2 * dot(N_view, L) * N_view - L);
+    @Fragment float3 V = -normalize( P_view );
+
+    @Fragment float4 SpecDiff = pow(max(0, dot(wvSHV, V)), 32)*vHighlight1;   // specular for base paint
+    @Fragment float4 SpecShellac = pow(max(0, dot(wvSHV, V)), 64)*vHighlight2;   // specular for shellac layer
+    
+    //combine them all
+    @Fragment float4 DiffColor = dot(N_world, skyDir)*Diff + 1.25*SpecDiff;
+    @Fragment float4 ShellacColor = Shellac*(lightMul*CubeSample) + 1.60*SpecShellac;
+
+    override color = DiffColor + fReflectivity*ShellacColor;
+}
+
+//
+// Render simple environment-mapped metal surface.
+// Corresponds to the HLSL effect "RenderEnvMappedScene_NoTexture"
+//
+// This effect is must simpler than RenderEnvMappedCarSpark, since
+// it doesn't deal with texture mappi
+//
+shader class RenderEnvMappedMetalSpark extends RenderEnvMappedSceneBase
+{
+//--------------------------------------------------------------------------------------
+// @Fragment
+//--------------------------------------------------------------------------------------
+
+    @Fragment float fLight = saturate( dot( skyDir, N_world ) ) + 0.2f;
+    @Fragment float4 outCol = 0.3*materialDiff*fLight + 1.5 * materialSpec*CubeSample;
+
+    override color = float4( outCol.xyz, materialDiff.w ); // preserve alpha
+}
+
+//
+// Render environment-mapped glass.
+// Corresponds to the HLSL effect "RenderEnvMappedGlass"
+//
+// This effect is identical to the RenderEnvMappedMetalSpark
+// effect, except that it also requires non-default blending.
+//
+shader class RenderEnvMappedGlassSpark
+    extends RenderEnvMappedMetalSpark
+{
+//--------------------------------------------------------------------------------------
+// @Pixel
+//--------------------------------------------------------------------------------------
+
+    //
+    // Define custom blending logic.
+    //
+    // The Spark D3D11 interface provides an attribute "OM_Dest" of type
+    // @Pixel Pixel (yes, a per-pixel pixel) that represents the destination
+    // pixel being blended over. The programmer can then define their
+    // blending logic by fetching attributes of this pixel and combining
+    // them with @Fragment attributes.
+    //
+    // Because the OM is not a programmable stage, its capabilities are
+    // limited, and expressions that are too complex will fail to compile.
+    //
+    override target = color * color.w + (target @ OM_Dest) * (1 - color.w);
+}
+
+//
+// Visualize contents of cube-map.
+// Corresponds to the HLSL effect "VisualizeCubeMap"
+//
+// This effect isn't used in the current application, and was
+// ported from HLSL only for completeness.
+//
+shader class VisualizeCubeMapSpark
+    extends Base
+{
+    override RS_Position = float4( P_model, 1.0f );
+
+    @Fragment float4 color = Sample( txVisual, samPoint, texCoord );
+
+    override target = color;
+}

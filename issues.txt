@@ -1,0 +1,80 @@
+===============================================================================
+Known Issues
+===============================================================================
+
+This release has a large number of issues, and should be considered "research
+quality" rather than "production quality" code. Caveat emptor.
+
+sparkc Compiler:
+  - As described earlier, the compiler does not really parse its command
+    line, and will always use the second argument as a prefix for its output
+    and the third argument as the input file to read.
+  - There are a number of cases where invalid input code, unimplemented
+    features, or just plain bugs cause the compiler to crash rather than
+    yield useful diagnostic output.
+
+Unsupported Direct3D11 Features:
+Several features of the D3D11 pipeline are not currently supported, but
+will be added in future releases.
+  - The Spark standard library does not expose all of the built-in functions
+    available in HLSL. These have been added in a piece-meal fashion, as
+    required to support example programs.
+  - Spark shaders support only a single constant buffer.
+  - Spark shaders cannot use the Stream Out (SO) pipeline stage,
+    or related features (e.g., multiple streams output from the GS stage)
+  - Spark does not support Unordered Access Views (UAVs)
+  - Spark does not currently expose access to the following system-value
+    semantics:
+    - SV_ClipDistance
+    - SV_CullDistance
+    - SV_Coverage
+    - SV_Depth
+    - SV_IsFrontFace
+    - SV_Position (PS input)
+    - SV_SampleIndex
+  - Spark does not expose any support for multisample antialiasing,
+    sample-frequency shading, or access to MSAA surfaces.
+  - Spark does not support the 'discard' operation in the PS stage, nor
+    does it have a good way to model patch culling in the HS stage.
+  - Only a small subset of texture types and formats are supported.
+    Texture2D[float4] and TextureCube[float4] are really the only
+    texture types that can be expected to work.
+  - Spark supports only a limited set of blending modes in the Output
+    Merger (OM) stage (specificially, enough to suppor the blending
+    used in the CubeMapGS example). It is reccomended that users
+    stick to default (disabled) blending for now.
+  - Spark does not provide access to the depth-stencil and rasterizer
+    pipeline states. Instead depth-stencil and rasterizer state are
+    inherited from whatever configuration the pipeline was in before
+    Spark rendering begins. This is most notable in the PNTriangles
+    example, where setting the wireframe option does not immediately
+    affect the Spark rendering.
+
+Language/Runtime Caveats:
+  - Note that in Spark we use parentheses () to do array indexing
+    (unlike C/C++ which use []) and square brackets [] for type
+    parameters (unlike C++/Java/C# which use <>).
+  - There are currently strong restrictions on the kinds of computation
+    that may be performed at @Constant or @Uniform rates. Most of these
+    are due to unimplemented code in the LLVM and C++ code-generation
+    paths.
+  - Currently, the system does not support @Constant parameters on
+    shader classes, although these should eventually be usable to
+    express compile-time parameterization.
+  - Due to a compiler bug, any "mixin" shader class should also be
+    marked "abstract", or it will generate incorrect C++ wrapper code.
+  - Due to a compiler bug, any shader class that configures the tessellation
+    system should declare its overrides for HS_InputCoarseVertexCount and
+    HS_OutputControlPointCount before any other code. In general, order
+    of declarations inside a Spark shader class is not supposed to matter,
+    however.
+  - Checking and code generation for user-defined functions has many bugs.
+    For example, the compiler does not properly check that the destination
+    of an assignment is actually assignable.
+  - Function that have explicitly rate-qualified inputs or outputs should
+    not use control-flow at present. Doing so can result in difficult-to-
+    diagnose errors in the generated HLSL code.
+  - The design of the support classes in the spark::d3d11 namespace is
+    very poor, and will need to be fleshed out significantly in future
+    releases.
+

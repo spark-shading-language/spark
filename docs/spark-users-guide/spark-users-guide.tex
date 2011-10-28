@@ -1,0 +1,2010 @@
+\documentclass[]{report}
+
+\usepackage{fullpage}
+
+\usepackage[scaled=.92]{helvet}
+\usepackage{times}
+\usepackage{graphicx}
+\usepackage{epstopdf}
+\usepackage{amsmath}
+\usepackage{tabularx}
+\usepackage{tabulary}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{url}
+\usepackage{longtable}
+\usepackage{verbatim}
+\usepackage{hyperref}
+
+\hypersetup{
+    pdfborder={0 0 0},
+    colorlinks=false
+}
+
+%\usepackage{fancyhdr}
+
+%\pagestyle{fancy}
+%\fancyhead[LE,RO]{\slshape\thepage}
+%\fancyhead[RE]{\slshape \leftmark}
+%\fancyhead[LO]{\slshape \rightmark}
+%\fancyfoot[LO,LE]{\slshape Spark Programmer's Guide}
+%\fancyfoot[C]{}
+%\fancyfoot[RO,RE]{\slshape 12/28/2010}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1ex plus 0.5ex minus 0.2ex}
+
+\definecolor{frequency_color}{RGB}{0,176,80}
+\definecolor{keyword_color}{RGB}{0,32,96}
+\definecolor{comment_color}{RGB}{192,0,0}
+\definecolor{type_color}{RGB}{0,112,192}
+\definecolor{keyword_arg_color}{RGB}{144,155,170}
+
+\lstdefinestyle{spark_style}{
+    basicstyle=\small\ttfamily,
+    classoffset=0,
+    morekeywords={pass,override,virtual,input,abstract,void,mixin,primary,struct,implicit,return,where,shader,class,record,type,concept,operator,for,in,if,output,input,extends,true,false},
+    keywordstyle=\color{keyword_color}\bfseries\ttfamily,
+    classoffset=1,
+    morekeywords={@Constant,@Uniform,@Vertex,@RasterVertex,@Fragment,@Pixel,@E,@Patch,@ControlPoint,@ShadedVertex,@AssembledVertex,@RasterVertex,@DomainVertex,@InputControlPoint,@OutputControlPoint,@InputPatch,@OutputPatch,@Sample,@Element,@CoarseVertex,@FineVertex,@GeometryOutput,@GeometryInput,@InputPatch,@OutputPatch,@PatchCorner,@PatchEdge,@ControlPoint,@PatchInterior,@MyRecord,@Light},
+    keywordstyle=\color{frequency_color}\ttfamily,
+    classoffset=2,
+    morekeywords={Constant,Uniform,Vertex,RasterVertex,Fragment,Pixel,float,int,float4,float3,float2,float4x4,
+        VertexBuffer,SimpleTransform,D3D9DrawPass,D3D11DrawPass,ShadedVertex,AssembledVertex,E,Array,Patch,
+        ControlPoint,D3D11NullTessellator,D3D11NullGeometryShader,VertexColors,SimpleTransformAndVertexColors,
+        DomainVertex,InputControlPoint,OutputControlPoint,InputPatch,OutputPatch,
+        D3D11TessellatorPassThrough,D3D11GeometryShaderPassThrough,Displacement,OutputStream,T,
+        ID3D11RenderTargetView,Desc,Linear,SimpleTessellation,PointSprites,
+        Color,CoarseVertex,FineVertex,RasterVertex,Simple,VertexStream,
+        Base,SkeletalAnimation,MorphTargetAnimation,CubicGregory,CubicGregoryTris,
+        CubicGregoryQuads,Tris,Quads,DisplacementMapping,RenderToCubeMap,PointSprites,
+        Phong,EnvMap,PointLight,SpotLight,Range,bool,ubyte,unorm,ushort,uint,
+        ubyte4,unorm4,uint4,float3x3,float4x3,SamplerState,Texture2D,TextureCube,Buffer,DrawSpan,PNU,
+        BasicSpark11,byte,short,half,double,DepthStencilView,ID3D11DepthStencilView,D3D11GeometryShader,GeometryInput,
+        GeometryOutput,Stream,D3D11NullTessellation,D3D11Tessellation,PatchCorner,PatchEdge,PatchInterior,
+        Base,Derived,MyRecord,MyShader,PhongMaterial,SimpleAttribute,SomeMethods,SimpleRecord,Light,
+        ID3D11IndexBuffer,D3D11_PRIMITIVE_TOPOLOGY,UINT,ID3D11IndexBuffer,DXGI_FORMAT,TessellationPartitioning,TessellationOutputTopology},
+    keywordstyle=\color{type_color}\ttfamily,
+    classoffset=0,
+    moredelim=[is][\color{keyword_arg_color}\ttfamily]{|}{|},
+    morecomment=[l]//,
+    commentstyle=\color{comment_color},
+    tabsize=2,
+    mathescape=true}
+
+\lstnewenvironment{spark}[1][]
+    {\lstset{
+        style=spark_style,
+        #1}}
+    {}
+
+\lstdefinestyle{hlsl_style}{
+    basicstyle=\small\ttfamily,
+    classoffset=0,
+    morekeywords={virtual,abstract,void,struct,return,class,operator,for,in,if,cbuffer},
+    keywordstyle=\color{keyword_color}\bfseries\ttfamily,
+    classoffset=1,
+    morekeywords={Constant,Uniform,Vertex,RasterVertex,Fragment,Pixel,float,int,float4,float3,float2,float4x4,
+        VertexBuffer,SimpleTransform,D3D9DrawPass,D3D11DrawPass,ShadedVertex,AssembledVertex,E,Array,Patch,
+        ControlPoint,D3D11NullTessellator,D3D11NullGeometryShader,VertexColors,SimpleTransformAndVertexColors,
+        DomainVertex,InputControlPoint,OutputControlPoint,InputPatch,OutputPatch,
+        D3D11TessellatorPassThrough,D3D11GeometryShaderPassThrough,Displacement,OutputStream,T,
+        ID3D11RenderTargetView,Desc,Linear,SimpleTessellation,PointSprites,
+        Color,CoarseVertex,FineVertex,RasterVertex,Simple,VertexStream,
+        Base,SkeletalAnimation,MorphTargetAnimation,CubicGregory,CubicGregoryTris,
+        CubicGregoryQuads,Tris,Quads,DisplacementMapping,RenderToCubeMap,PointSprites,
+        Phong,EnvMap,PointLight,SpotLight,Range,bool,ubyte,unorm,ushort,uint,
+        ubyte4,unorm4,uint4,float3x3,float4x3,SamplerState,Texture2D,TextureCube,Buffer,DrawSpan,PNU,
+        BasicSpark11,byte,short,half,double,DepthStencilView,ID3D11DepthStencilView,D3D11GeometryShader,GeometryInput,
+        GeometryOutput,Stream,D3D11NullTessellation,D3D11Tessellation,PatchCorner,PatchEdge,PatchInterior},
+    keywordstyle=\color{type_color}\ttfamily,
+    classoffset=0,
+    moredelim=[is][\color{keyword_arg_color}\ttfamily]{|}{|},
+    morecomment=[l]//,
+    commentstyle=\color{comment_color},
+    tabsize=2,
+    mathescape=true}
+
+\lstnewenvironment{hlsl}[1][]
+    {\lstset{
+        style=hlsl_style,
+        #1}}
+    {}
+
+\definecolor{codeboxcolor}{rgb}{0.95,0.95,0.95}
+\makeatletter\newenvironment{codebox}{%
+   \begin{lrbox}{\@tempboxa}\begin{minipage}{6.0in}\setlength{\parskip}{1.5ex plus 0.5ex minus 0.2ex}}{\end{minipage}\end{lrbox}%
+   \colorbox{codeboxcolor}{\usebox{\@tempboxa}}
+}\makeatother
+
+\newenvironment{codeblock}%
+{\begin{center}\begin{codebox}}%
+{\end{codebox}\end{center}}
+
+\newcommand{\codeblockheader}[1]{\textbf{\small #1: }}
+
+\newenvironment{codeblockx}[1]%
+{\begin{center}\begin{codebox} \codeblockheader{#1}}%
+{\end{codebox}\end{center}}
+
+\definecolor{stdlibboxcolor}{rgb}{1,1,1}
+\makeatletter\newenvironment{stdlibbox}{%
+   \begin{lrbox}{\@tempboxa}\begin{minipage}{6.0in}\setlength{\parskip}{1.5ex plus 0.5ex minus 0.2ex}}{\end{minipage}\end{lrbox}%
+   \colorbox{stdlibboxcolor}{\usebox{\@tempboxa}}
+}\makeatother
+
+\newenvironment{stdlibx}%
+{\begin{center}\begin{stdlibbox}}%
+{\end{stdlibbox}\end{center}}
+
+\newcommand{\stdlibheader}{\hline \textbf{Declaration} & \textbf{Description} \\ \hline}
+
+\newcommand{\decl}[1]{\code{#1} &}
+\newcommand{\desc}[1]{\text{#1} \\ \hline}
+
+\newcommand{\longdecl}[1]{\multicolumn{2}{|l|}{\code{#1}}\\&}
+
+\lstnewenvironment{blockdecl}[1][]
+    {\lstset{
+        style=spark_style,
+        #1}}
+    {}
+
+
+\lstnewenvironment{cplusplus}[1][]
+    {\lstset{
+        language=C++,
+        basicstyle=\small\ttfamily,
+        classoffset=0,
+        keywordstyle=\color{keyword_color}\bfseries\ttfamily,
+        commentstyle=\color{comment_color},
+        classoffset=1,
+        morekeywords={SimpleTransform,SimpleTransformAndVertexColor,ID3D11Device,ID3D11DeviceContext,ID3D11Buffer,float4x4,Desc,DrawSpan,VertexStream,ID3D11DepthStencilView,ID3D11RenderTargetView,ID3D11ShaderResourceView,ID3D11SamplerState,ID3D11InputLayout,
+            ISparkContext,BasicSpark11,ID3D11VertexShader,ID3D11PixelShader,Uniform,D3DXVECTOR4,D3DXMATRIX,D3D11_MAPPED_SUBRESOURCE,Light,float3,
+            D3D11_INPUT_ELEMENT_DESC,UINT,D3D11_PRIMITIVE_TOPOLOGY,DXGI_FORMAT},
+        keywordstyle=\color{type_color}\ttfamily,
+        classoffset=0,
+        tabsize=2,
+        #1}}
+    {}
+
+\newcommand{\code}[1]{\text{\lstinline[style=spark_style]{#1}}}
+\newcommand{\kw}[1]{\text{\texttt{\textbf{\textcolor{keyword_color}{#1}}}}}
+
+
+\definecolor{notecolor}{rgb}{0.85,0.85,0.85}
+\makeatletter\newenvironment{notebox}{%
+   \begin{lrbox}{\@tempboxa}\begin{minipage}{5.5in}\setlength{\parskip}{1.5ex plus 0.5ex minus 0.2ex}}{\end{minipage}\end{lrbox}%
+   \colorbox{notecolor}{\usebox{\@tempboxa}}
+}\makeatother
+
+\newenvironment{note}[1][]%
+{\begin{center}\begin{notebox}\textbf{Note: }}%
+{\end{notebox}\end{center}}
+
+\begin{document}
+
+\title{Spark User's Guide}
+\author{Tim Foley, Intel Corporation}
+\date{\today}
+\maketitle
+
+\tableofcontents
+
+\begin{comment}
+\chapter{Introduction}
+\section{A First Spark Program}
+
+\begin{figure}
+\begin{spark}
+shader class Simple
+    extends D3D11DrawPass
+{
+    @Fragment float4 color = float4(0.0f, 0.5f, 1.0f, 1.0f);
+    output @Pixel float4 target = color;
+
+    input @Uniform VertexStream[float3] positionStream;
+    input @Uniform float4x4 modelViewProj;
+
+    @CoarseVertex float3 P_model = positionStream( IA_VertexID );
+    @CoarseVertex float4 P_proj = mul( P_model, modelViewProj );
+    override RS_Position = P_proj;
+
+    input @Uniform int triangleCount;
+    override IA_DrawSpan = TriangleList( triangleCount );
+}
+\end{spark}
+\caption{\label{fig:simple-example}A simple Spark shader.}
+\end{figure}
+
+Figure \ref{fig:simple-example} shows a simple shader written in Spark.
+This shader renders triangles in a solid color, producing a result like that in Figure \ref{fig:simple-render}.
+We will discuss the main features of the Spark language, with reference to Figure \ref{fig:simple-example}.
+
+\begin{description}
+\item[A Spark shader is a class.]{Explain why here.}
+\end{description}
+
+Let's look at the lines of this shader in more detail, and discuss the concepts of the Spark language.
+
+TODO: Actually do that!
+
+\chapter{Spark Language Guide}
+
+\chapter{Spark Language Reference}
+\end{comment}
+
+\chapter{Getting Started with Spark and Direct3D 11}
+
+\begin{figure}
+\begin{codeblockx}{HLSL}
+\begin{hlsl}
+cbuffer Uniform
+{
+    float4x4 worldViewProj;
+    float4x4 world;
+    float4   objectColor;
+    float3   lightDir;
+    float    ambient;
+};
+
+Texture2D    diffuseTexture;
+SamplerState linearSampler;
+
+struct AssembledVertex
+{
+    float3 position : Position;
+    float3 normal   : Normal;
+    float2 texCoord : TexCoord;
+};
+
+struct RasterVertex
+{
+    float3 normal   : Normal;
+    float2 texCoord	: TexCoord;
+    float4 position	: SV_Position;
+};
+
+RasterVertex VS( AssembledVertex input )
+{
+    RasterVertex output;
+    output.normal = mul( input.normal, (float3x3)world );
+    output.texCoord = input.texCoord;
+    output.position = mul( float4(input.position,1), worldViewProj );
+    return output;
+}
+
+float4 PS( RasterVertex input ) : SV_Target
+{
+    Fragment output;
+    float4 diffuse = diffuseTexture.Sample( linearSampler,
+                                            input.texCoord );
+    float lighting = saturate( dot(lightDir, N_world) );
+    lighting = max( lighting, ambient );
+    float4 color = diffuse * lighting;
+    return color;
+}
+\end{hlsl}
+\end{codeblockx}
+\caption{\label{fig:basichlsl}The \code{BasicHLSL11} shader}
+\end{figure}
+
+
+\begin{figure}
+\begin{codeblockx}{Spark}
+\begin{spark}
+shader class BasicSpark11 extends D3D11DrawPass
+{
+    // @Uniform
+    //
+    input @Uniform float4x4          world;
+    input @Uniform float4x4          view;
+    input @Uniform float4x4          proj;
+    input @Uniform float4            objectColor;
+    input @Uniform float3            lightDir;
+    input @Uniform float             ambient;
+    input @Uniform Texture2D[float4] diffuseTexture;
+    input @Uniform SamplerState      linearSampler;
+
+    @Uniform float4x4 viewProj      = mul( view, proj );
+    @Uniform float4x4 worldViewProj = mul( world, viewProj );
+
+    // @AssembledVertex
+    //
+    struct PNU
+    {
+        float3 position;
+        float3 normal;
+        float2 texCoord;
+    }
+    input @Uniform VertexStream[PNU] myVertexStream;
+
+    @AssembledVertex PNU    fetched  = myVertexStream( IA_VertexID );
+    @AssembledVertex float3 P_model  = fetched.position;
+    @AssembledVertex float3 N_model  = fetched.normal;
+    @AssembledVertex float2 texCoord = fetched.texCoord;
+
+    input @Uniform DrawSpan myDrawSpan;
+    override IA_DrawSpan = myDrawSpan;
+
+    // @CoarseVertex
+    //
+    @CoarseVertex float3 N_world = mul(N_model, float3x3(world));
+
+    // @RasterVertex
+    //
+    override RS_Position = mul(float4(P_model, 1.0f), worldViewProj);
+
+    // @Fragment
+    //
+    @Fragment float4 diffuse  = Sample(diffuseTexture, linearSampler, texCoord);
+    @Fragment float  lighting = max(saturate(dot(lightDir, N_world)), ambient);
+    @Fragment float4 color    = diffuse * lighting;
+
+    // @Pixel
+    //
+    output @Pixel float4 myTarget = color;
+}
+\end{spark}
+\end{codeblockx}
+\caption{\label{fig:basicspark}The \code{BasicSpark11} shader class}
+\end{figure}
+
+In this chapter we will discuss how to write Spark shaders that target the Direct3D~11 (D3D11) pipeline and use them for rendering from a C++ application.
+We expect that most readers are already familiar with programming D3D11 using HLSL and C++.
+As such, we focus on the task of porting an existing HLSL shader to Spark.
+
+Figure~\ref{fig:basichlsl} shows shader code adapted from the \code{BasicHLSL11} example in the D3D11 SDK.
+Figure~\ref{fig:basicspark} show the result of porting this shader code to Spark.
+Let's look at each part of the Spark shader in detail, and see how it relates to the HLSL original.
+
+\section{Shader Classes}
+
+A Spark shader takes the form of a \code{shader class}, whereas HLSL shader code is divided into one or more per-stage ``entry points.''
+The \code{BasicSpark11} shader class is declared to \kw{extend} a class named \code{D3D11DrawPass}.
+This indicates that \code{BasicSpark11} targets the D3D11 pipeline, and defines the shading state for a single draw pass.
+By taking advantage of object-oriented facilities like inheritance and \code{virtual} functions, a programmer can create libraries of highly composable shading effects -- without sacrificing run-time performance.
+
+In contrast, the \code{BasicHLSL11} shader divides its shader code between two entry points: \code{VS()} and \code{PS()}.
+In addition, in order to render with \code{BasicHLSL11}, we need to write C++ code to bind these entry points and configure the various fixed-function pipeline stages.
+We will look at the C++ code required to render with HLSL and Spark in more detail in Section~\ref{sec:sparkhlslcpp}.
+
+Whereas an HLSL shader entry point is a \emph{procedure} consisting of of \emph{statements} that compute a result, a Spark shader defines most of the shading computation by declaring \emph{attributes}.
+In brief, an attribute is some value that needs to be computed at a particular \emph{rate} -- per-vertex, per-fragment, etc.
+
+
+\section{Uniforms}
+
+The \code{BasicHLSL11} shader has two kinds of parameters: those like \code{lightDir} that reside in a constant buffer, and shader resources like \code{diffuseTexture}.
+In Spark, both of these kinds of parameters are represented by \kw{input} attributes with the \code{@Uniform} rate.
+For example:
+\begin{codeblock}
+\begin{tabular}{l|l}
+\codeblockheader{HLSL} & \codeblockheader{Spark} \\
+\begin{hlsl}
+cbuffer Uniform {
+    ...
+    float3   lightDir;
+    float    ambient;
+};
+Texture2D    diffuseTexture;
+\end{hlsl}
+&
+\begin{spark}
+
+
+input @Uniform float3   lightDir;
+input @Uniform float    ambient;
+
+input @Uniform Texture2D[float4] diffuseTexture;
+\end{spark}
+\end{tabular}
+\end{codeblock}
+
+\begin{note}
+The HLSL \code{Texture2D} type defaults to a texture that returns \code{float4} values.
+In Spark, however, we always have to specify the type of a texture: for example, \code{Texture2D[float4]}.
+\end{note}
+
+In addition to defining shader parameters, Spark also allows a shader to perform uniform comptuation, by defining new (non-\kw{input}) attributes with the \code{@Uniform} rate:
+\begin{codeblockx}{Spark}
+\begin{spark}
+@Uniform float4x4 viewProj = mul( view, proj );
+@Uniform float4x4 worldViewProj = mul( world, viewProj );
+\end{spark}
+\end{codeblockx}
+When using HLSL shaders, these same computations would need to be performed in C++ code, spreading implementation details of the shader across multiple files.
+
+\section{Input Assembler}
+
+The Input Assembler (IA) is a fixed-function stage responsible for gathering vertex data from memory, and also determining the number and type of primitives to be drawn.
+
+\subsection{Vertex Streams}
+
+When using HLSL shaders, the programmer must declare the type of vertices it expects the IA to produce:
+\begin{codeblockx}{HLSL}
+\begin{hlsl}
+struct AssembledVertex
+{
+    float3 position : Position;
+    float3 normal   : Normal;
+    float2 texCoord : TexCoord;
+};
+\end{hlsl}
+\end{codeblockx}
+and then use C++ code to create a corresponding \code{ID3D11InputLayout*}:
+\begin{codeblockx}{C++}
+\begin{cplusplus}
+const D3D11_INPUT_ELEMENT_DESC elements[] =
+{
+    { "Position",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  ... },
+    { "Normal",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, ... },
+    { "TexCoord",  0, DXGI_FORMAT_R32G32_FLOAT,    0, 24, ... },
+};
+ID3D11InputLayout* layout = NULL;
+device->CreateInputLayout( elements, 3, ..., &layout );
+\end{cplusplus}
+\end{codeblockx}
+
+In Spark, both of these steps are performed in the shading language.
+First we declare a \kw{struct} type that defines the layout of our vertices in memory:
+\begin{codeblockx}{Spark}
+\begin{spark}
+struct PNU
+{
+    float3 position;
+    float3 normal;
+    float2 texCoord;
+}
+\end{spark}
+\end{codeblockx}
+then a shader parameter for the input vertex stream:
+\begin{codeblock}
+\begin{spark}
+input @Uniform VertexStream[PNU] myVertexStream;
+\end{spark}
+\end{codeblock}
+and finally use shader code to fetch a vertex \kw{struct} from the stream and store each of its fields into an attribute for easy reference in the rest of the shader:
+\begin{codeblock}
+\begin{spark}
+@AssembledVertex PNU fetched = myVertexStream( IA_VertexID );
+@AssembledVertex float3 P_model = fetched.position;
+@AssembledVertex float3 N_model = fetched.normal;
+@AssembledVertex float2 texCoord = fetched.texCoord;
+\end{spark}
+\end{codeblock}
+The attribute \code{IA\_VertexID} is one of many built-in attributes provided by the Spark standard library.
+These attributes are documented in more detail in Chapter~\ref{chap:d3d11-ref}.
+
+\subsection{Draw Span}
+
+Along with defining how to fetch vertices from memory, the IA is also responsible for defining the number and type of primitives to draw.
+This information doesn't appear in an HLSL shader, and is instead usually set from C++ code:
+\begin{codeblockx}{C++}
+\begin{cplusplus}
+context->IASetInputLayout( layout );
+context->IASetIndexBuffer( ib, ibFormat );
+context->IASetPrimitiveTopology( primTopo );
+context->DrawIndexed( indexCount, baseIndex, baseVertex );
+\end{cplusplus}
+\end{codeblockx}
+
+In Spark, the number and type of primitives to draw is described by the \code{DrawSpan} type.
+Typically a shader simply defines a single parameter of type \code{DrawSpan}, and binds the IA to use it:
+\begin{codeblockx}{Spark}
+\begin{spark}
+input @Uniform DrawSpan myDrawSpan;
+override IA_DrawSpan = myDrawSpan;
+\end{spark}
+\end{codeblockx}
+
+\section{Vertex Shader}
+
+The code in the HLSL vertex shader \code{VS()} translates into Spark code for several attributes with the \code{@CoarseVertex} rate.
+Where in HLSL we have:
+\begin{codeblockx}{HLSL}
+\begin{hlsl}
+RasterVertex output;
+output.normal = mul( input.normal, (float3x3)world );
+output.texCoord = input.texCoord;
+...
+return output;
+\end{hlsl}
+\end{codeblockx}
+in Spark we have:
+\begin{codeblockx}{Spark}
+\begin{spark}
+@CoarseVertex float3 N_world = mul(N_model, float3x3(world));
+...
+\end{spark}
+\end{codeblockx}
+There are several notable differences between the HLSL and Spark code:
+\begin{itemize}
+\item{The HLSL code has to declare \code{struct} types for the input and output of the vertex shader.}
+\item{The HLSL vertex shader has to extract fields from the \lstinline{input} struct and fill in an \lstinline{output} struct, while the Spark code simply uses and declares attributes.}
+\item{In Spark we don't need to write any addition code to ``pass through'' the \code{texCoord} attribute.}
+\end{itemize}
+
+\section{Rasterizer}
+\label{sec:introrasterizer}
+
+In the HLSL shader, we specify the clip-space position to pass to the rasterizer by using the \code{SV\_Position} output semantic.
+In we Spark, we specify this position by \emph{overriding} the the inherited declaration of the \code{RS\_Position} attribute:
+\begin{codeblock}
+\begin{spark}
+override RS_Position = mul(float4(P_model, 1.0f),
+                           worldViewProjection);
+\end{spark}
+\end{codeblock}
+
+In Spark you use the \kw{override} keyword to indicate that you are overriding an inherited attribute or function.
+When you overriding an attribute, you don't need to write out the type or rate, since the compiler already knows it.
+The declaration above is equivalent to the more verbose declaration:
+\begin{codeblock}
+\begin{spark}
+override @RasterVertex float4 RS_Position =
+    mul(float4(P_model, 1.0f),
+        worldViewProjection);
+\end{spark}
+\end{codeblock}
+
+
+\section{Pixel Shader}
+
+Must like with the HLSL vertex shader, the code in \code{PS()} translates into several Spark attributes.
+Here is the HLSL code:
+\begin{codeblockx}{HLSL}
+\begin{hlsl}
+Fragment output;
+float4 diffuse = diffuseTexture.Sample( linearSampler,
+                                        input.texCoord );
+float lighting = saturate( dot(lightDir, N_world) );
+lighting = max( lighting, ambient );
+float4 color = diffuse * lighting;
+return color;
+\end{hlsl}
+\end{codeblockx}
+and here is the Spark code:
+\begin{codeblockx}{Spark}
+\begin{spark}
+@Fragment float4 diffuse = Sample(diffuseTexture,
+                                  linearSampler,
+                                  texCoord );
+@Fragment float lighting = max(saturate(dot(lightDir, N_world)),
+                               ambient);
+@Fragment float4 color = diffuse * lighting;
+\end{spark}
+\end{codeblockx}
+Here we see some more differences between the HLSL and Spark code:
+\begin{itemize}
+\item{The HLSL code calls a method \code{diffuseTexture.Sample()} while the Spark code passes \code{diffuseTexture} as the first argument to a global \code{Sample()} function.}
+\item{The HLSL code uses a \emph{mutable} local variable \code{lighting}. Spark attributes cannot be assigned to once they are declared, so we fold together the two lines that define \code{lighting}}
+\end{itemize}
+
+\begin{note}
+There is a discrepancy in the naming of the D3D Pixel Shader stage, in that it shades \emph{fragments} and not \emph{pixels}.
+This distinction matters in Spark, so please keep it in mind.
+\end{note}
+
+\section{Output Merger}
+
+The HLSL shader specifies a value that should be written to a render target using the \code{SV\_Target} semantic.
+If multiple outputs are required, the shader uses \code{SV\_Target0}, \code{SV\_Target1}, etc.
+
+In contrast, the Spark shader declares a shader output by declaring an \kw{output} attribute with the \code{@Pixel} rate:
+\begin{codeblock}
+\begin{spark}
+output @Pixel float4 myTarget = color;
+\end{spark}
+\end{codeblock}
+If multiple outputs are required, the programmer simply declares multiple \code{output @Pixel} attributes.
+
+\section{Interfacing with C++}
+\label{sec:sparkhlslcpp}
+
+\begin{figure}
+\begin{codeblockx}{C++}
+\begin{cplusplus}
+// -------------- Compile Time: Declare constant-buffer layout -------------- //
+struct Uniform
+{
+    D3DXMATRIX  worldViewProj;
+    D3DXMATRIX  world;
+    D3DXVECTOR4 objectColor;
+    D3DXVECTOR4 lightDirAmbient;
+};
+
+// -------------- Initialization Time: Create shaders, states --------------- //
+ID3D11VertexShader* vs = NULL;
+device->CreateVertexShader( vsCode, vsCodeSize, NULL, &vs );
+ID3D11PixelShader* ps = NULL:
+device->CreatePixelShader( psCode, psCodeSize, NULL, &ps );
+const D3D11_INPUT_ELEMENT_DESC elements[] =
+{
+    { "Position",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  ... },
+    { "Normal",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, ... },
+    { "TexCoord",  0, DXGI_FORMAT_R32G32_FLOAT,    0, 24, ... },
+};
+ID3D11InputLayout* layout = NULL;
+device->CreateInputLayout( elements, 3, vsCode, vsCodeSize, &layout );
+D3D11Buffer* cb = NULL;
+D3D11_BUFFER_DESC cbDesc = { ... }
+device->CreateBuffer( &cbDesc, NULL, &cb );
+
+// ------------------------------ Render Time ------------------------------- //
+// Update constant buffer
+D3D11_MAPPED_SUBRESOURCE mapped;
+context->Map( constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped );
+Uniform* uniform = (Uniform*) mapped.pData;
+uniform.worldViewProj = world * view * proj;
+uniform.world = world;
+uniform.objectColor = objectColor;
+unfirom.lightDirAmbient = D3DXVECTOR4( lightDir, ambient );
+context->Unmap( cb, 0 );
+// Configure Input Assembler
+context->IASetInputLayout( layout );
+context->IASetVertexBuffers( 0, 1, vb, &vbStride, &vbOffset );
+context->IASetIndexBuffer( ib, ibFormat, ibOffset );
+context->IASetPrimitiveTopology( primTopo );
+// Configure Vertex Shader
+context->VSSetShader( vs, NULL, 0 );
+context->VSetConstantBuffers( 0, 1, &cb );
+// Configure Pixel Shader
+context->PSSetShader( ps, NULL, 0 );
+context->PSetConstantBuffers( 0, 1, &cb );
+context->PSSetSamplers( 0, 1, &linearSampler );
+context->PSSetShaderResources( 0, 1, &diffuseTexture );
+// Configure Output Merger
+context->OMSetRenderTargets( 1, &rtv, dsv );
+// Submit
+context->DrawIndexed( indexCount, baseIndex, baseVertex );
+\end{cplusplus}
+\end{codeblockx}
+\caption{\label{fig:basichlslcpp}C++ code for rendering with \code{BasicHLSL11}}
+\end{figure}
+
+
+\begin{figure}
+\begin{codeblockx}{C++}
+\begin{cplusplus}
+// -------------- Compile Time: Include Spark-generated header -------------- //
+#include "BasicSpark11.h"
+
+// ------------ Initialization Time: Create spark shader instance ----------- //
+ISparkContext* sparkCtx = SparkCreateContext();
+BasicSpark11* shader = sparkCtxt->CreateShaderInstance<BasicSpark11>( device );
+
+// ------------------------------ Render Time ------------------------------- //
+// Set Uniform Parameters
+shader->SetWorld( world );
+shader->SetView( view );
+shader->SetProj( proj );
+shader->SetObjectColor( objectColor );
+shader->SetLightDir( lightDir );
+shader->SetAmbient( ambient );
+shader->SetDiffuseTexture( diffuseTexture );
+shader->SetLinearSampler( linearSampler );
+// Configure Input Assembler
+shader->SetMyVertexStream(
+    spark::d3d11::VertexStream(
+        vb, vbOffset, vbStride ) );
+shader->SetMyDrawSpan(
+    spark::d3d11::IndexedDrawSpan(
+        primTopo,
+        ib, ibFormat,
+        indexCount,
+        indexStart,
+        vertexStart));
+// Configure Output Merger
+shader->SetMyTarget( rtv );
+shader->SetDepthStencilView( dsv );
+// Submit
+shader->Submit( device, context );
+\end{cplusplus}
+\end{codeblockx}
+\caption{\label{fig:basicsparkcpp}C++ code for rendering with \code{BasicSpark11}}
+\end{figure}
+
+Figures \ref{fig:basichlslcpp} and \ref{fig:basicsparkcpp} show the C++ code required to render with the \code{BasicHLSL11} and \code{BasicSpark11} shaders, respectively.
+In each case the code has been broken down into actions that are required to interface with the shader at compile time, at run-time, and at render-time.
+
+Because the HLSL shader will read some shader parameters from a constant buffer, the C++ code needs to declare a \kw{struct} type that matches the layout of the constant buffer.
+Ensuring that the layout of this \kw{struct} matches the HLSL \kw{cbuffer} can be tricky, since the packing and alignment rules differ between C++ and HLSL.
+Note how the C++ code relies on knowledge of these packing rules to store the \code{lightDir} and \code{ambient} shader parameters in the same 4-component vector.
+
+The Spark shader compiler, {\sc sparkc}, automatically produces a C++ header file that defines a wrapper C++ interface for every Spark shader class.
+The Spark shader class \code{BasicSpark11} is thus reflected as a C++ class of the same name.
+The C++ simply \kw{\#include}s the generated header.
+
+At initialization time, the HLSL shader bytecode must be loaded and compiled, and any additional state objects that are needed (in this case, an input layout) must be created.
+In Spark, all of this initialization logic is encapsulated in the call to \code{CreateShaderInstance()}.
+This function creates a shader instance of the specified type, and creates any necessary D3D11 objects (vertex/pixel shaders, input layouts, constant buffers, etc.) at this time.
+
+At render time, the HLSL code path must map any constant buffers and overwrite their data.
+If a shader requires a composed matrix like \code{worldViewProj} or another parameter involves uniform computation, the C++ code must do it.
+In contrast, the automatically-generated C++ wrapper for \code{BasicSpark11} provides a uniform interface of \code{Set*()} methods for the Spark shader parameters.
+For example, the \code{lightDir} shader parameter is exposed with a \code{SetLightDir()} method.
+Behind the scenes Spark automatically computes values like \code{worldViewProj} and updates a constant buffer.
+
+\begin{note}
+In order to generate the names of \code{Set*()} methods, the Spark compiler automatically capitalizes the first letter of any attribute name (e.g., \code{lightDir} becomes \code{SetLightDir()}).
+\end{note}
+
+Before rendering with HLSL, we must bind state to the Input Assembler, bind shaders and resources to the Vertex and Pixel Shader, and bind resource to the Output Merger.
+After these steps, we submit a rendering operation by calling \code{DrawIndexed()} and providing the last few required parameters: the range of indices to submit.
+
+In Spark these same steps are achieved more uniformly.
+The user-defined vertex stream \code{myVertexStream} and draw span \code{myDrawSpan} are set just like any other shader parameter.
+The same goes for the user-defined render-target output \code{myTarget}, as well as the system-defined depth-stencil view.
+Because all of the parameters required for a rendering pass are specified through shader parameters, the Spark path only needs to \code{Submit()} the shader instance to a particular context to kick off a rendering pass.
+
+\begin{note}
+In the case of the Spark shader, we do not need to call all of the \code{Set*()} methods every frame.
+If we always use the same vertex stream or sampler when rendering with this shader, we can set it once at initialization time instead.
+\end{note}
+
+\chapter{Spark Language Guide}
+
+This chapter will provide a brief background on the concepts of the Spark language.
+More detailed reference information on language syntax and rules will be deferred to Chapter \ref{chap:langref}.
+
+\section{Shader Classes}
+
+The basic unit of code in Spark is a \emph{shader class}.
+All other declarations -- functions, types, attributes, etc. -- must be placed inside of a shader class.
+
+\subsection{Declaration}
+
+The following shader class \code{MyShader}:
+\begin{codeblock}
+\begin{spark}
+abstract shader class MyShader extends D3D11DrawPass
+{
+    int MyMethod( int a ) { return a * 2; }
+
+    record MyRecord;
+
+    @MyRecord int myAttribute = MyFunction( 3 );
+}
+\end{spark}
+\end{codeblock}
+includes a declaration of a method \code{MyMethod()}, a record \code{MyRecord}, and an attribute \code{myAttribute}.
+We will discuss methods, record, and attribute declarations more in sections \ref{sec:methoddeclguide}, \ref{sec:recorddeclguide}, and \ref{sec:attrdeclguide}, respectively.
+
+Because \code{MyShader} inherits from \code{D3D11DrawPass}, but fails to provide an overriding declaration for \kw{abstract} attributes like \code{RS\_Position} (see Chapter \ref{sec:introrasterizer}), the shader class itself must be marked \kw{abstract}.
+
+\subsection{Inheritance}
+
+A shader class can inherit from a system-defined class like \code{D3D11DrawPass} or from another user-defined shader class:
+\begin{codeblock}
+\begin{spark}
+abstract shader class Base extends D3D11DrawPass
+{
+    abstract @Fragment float4 diffuse;
+    virtual  @Fragment float specular = 0.0;
+
+    virtual float4 GetEnvColor( float3 direction )
+    {
+        return float4( 0.0 );
+    }
+}
+
+shader class Derived extends Base
+{
+    // override stuff inherited from D3D11DrawPass
+    override IA_DrawSpan = Draw( 3, 0 );
+    override RS_Position = float4( 0.0 );
+
+    // override stuff inherited from Base
+    override diffuse = float4( 1.0, 1.0, 1.0, 1.0 );
+
+    override float4 GetEnvColor( float3 direction )
+    {
+        return lerp( float4(1, 0, 0, 1),
+                     float4(0, 0, 1, 1),
+                     (direction.y + 1)*0.5 );
+    }
+}
+\end{spark}
+\end{codeblock}
+In this example, the shader class \code{Base} declares two attributes and one method.
+The \code{diffuse} attribute is \kw{abstract} and thus does not define a value.
+The \code{specular} attribute and \code{GetEnvColor()} method are both \kw{virtual} and thus need to define a value.
+This class also inherits the \kw{virtual} and \kw{abstract} members declared in \code{D3D11DrawPass}: most notably, the \kw{abstract} attributes \code{IA\_DrawSpan} and \code{RS\_Position}.
+
+The \code{Derived} class is not declared \kw{abstract}; it is a \emph{concrete} class.
+As such, it is required to provide a definition for every \kw{abstract} member it has inherited.
+Note that when overriding an attribute like \code{diffuse}, you need only given the \emph{name} of the attribute to override, and don't need to type out its full declaration.
+In contrast, when overriding a method, you must provide a full declaration, in case there might be overloaded methods with the same name but different signatures.
+
+Because the \code{specular} attribute is \kw{virtual} rather than \kw{abstract}, it does not need to be overridden.
+In this case \code{Derived} simply inherits the value of \code{specular} from \code{Base}.
+
+
+\subsection{Mixins}
+
+By default, Spark enforces \emph{single inheritance}.
+Every shader class must have one base class (the \code{D3D11DrawPass} class in the standard library is an exception: it has no base class).
+However, if we use shader classes to model different kind of rendering effects -- tessellation, materials, etc. -- we may want to combine a bunch of separately-developed classes together.
+
+To enable this, we can declare a Spark shader class to be a \emph{mixin}:
+\begin{codeblock}
+\begin{spark}
+abstract mixin shader class SkeletalAnimation
+    extends D3D11DrawPass
+{
+    ...
+}
+
+abstract mixin shader class PhongMaterial
+    extends D3D11DrawPass
+{
+    ...
+}
+
+shader class MyShader
+    extends D3D11DrawPass,
+            SkeletalAnimation,
+            PhongMaterial
+{
+}
+\end{spark}
+\end{codeblock}
+Here we have two shader classes declared with the \kw{mixin} keyword, and another shader class that combines the two.
+
+Many programmers are familiar with the idea of multiple inheritance, and may be aware of some of the problems it creates in languages like C++.
+The mixin approach in constrained in several ways that help avoid these problems:
+\begin{itemize}
+\item{Any shader class that isn't marked \kw{mixin} is considered \emph{primary}. Primary shader classes are restricted to a single-inheritance hierarchy.}
+\item{Every shader class must have exactly one ``most derived'' primary base class, and this must be the first shader class after the \kw{extends} keyword.}
+\item{The inheritance graph for a given shader class is \emph{linearized} in a way that avoids the problems that stem from ``diamond'' inheritance patterns.}
+\end{itemize}
+
+\section{Methods}
+\label{sec:methoddeclguide}
+
+Methods in Spark are very much like functions or subroutines in other shader languages:
+\begin{codeblock}
+\begin{spark}
+abstract shader class SomeMethods extends D3D11DrawPass
+{
+    int F( int x ) { return x + 1; }
+    float G( int n, float y )
+    {
+        float r = 0;
+        for( i in Range(0,n) )
+            r = (r + 1)*y;
+        return r;
+    }
+    abstract float H( float z );
+}
+\end{spark}
+\end{codeblock}
+
+The biggest differences from functions in a shading language like HLSL are:
+\begin{itemize}
+\item{Methods must be defined inside of a shader class, rather than at global scope.}
+\item{Spark allows for \kw{virtual} and \kw{abstract} methods, and a derived class can \kw{override} virtual or abstract methods it inherits.}
+\end{itemize}
+
+\section{Attributes}
+\label{sec:attrdeclguide}
+
+While methods can be used to define reusable pieces of shader code, the majority of the logic in a Spark shader will usually be defined using attributes.
+The following code block shows the most common form of an attribute declaration, with parts labeled:
+\begin{codeblock}
+\begin{spark}
+abstract shader class SimpleAttribute extends D3D11DrawPass
+{
+    ...
+//  <-rate--> <type> <name>  <-------------value------------->
+    @Fragment float4 nDotL = max( 0, dot( N_world, L_world ) );
+}
+\end{spark}
+\end{codeblock}
+This attribute is named \code{nDotL}, and is of type \code{float4}.
+It also has a \emph{rate} of \code{@Fragment}, which says that this attribute will be evaluated once per fragment (you can try to read the \code{@} character as ``per-'').
+Finally, the attribute has a \emph{value} expression that defines how to compute this attribute.
+
+Like methods, attributes may be declared \kw{abstract} or \kw{virtual}, and a derived class can \kw{override} virtual or abstract attributes.
+In addition, an attribute can also be marked as \kw{input} or \kw{output}.
+We will discuss input attributes in more detail in Section \ref{sec:recordguide}, but in most cases these are used to mark shader parameters (\code{input @Uniform}) and outputs (\code{output @Pixel}).
+
+The value expression for an attribute may involve constants, calls to user- and system-defined methods, and references to other attributes.
+When an attribute definition refers to another attribute with a different rate, the compiler may insert \emph{plumbing} code, for example to interpolate a value from vertices to fragments:
+\begin{codeblock}
+\begin{spark}
+@CoarseVertex float4 diffuse = ...;
+@Fragment float4 color = diffuse * nDotL;
+\end{spark}
+\end{codeblock}
+In this example, the per-vertex attribute \code{diffuse} will be interpolated to a per-fragment value so that it can be used in the computation of \code{color}.
+
+\section{Plumbing Operators}
+\label{sec:plumbingguide}
+
+Not all kinds of rate conversion, however, are allowed.
+For example, when using the Direc3D~11 pipeline, there is no way to convert from a per-fragment attribute to a per-vertex one:
+\begin{codeblock}
+\begin{spark}
+@Fragment float3 N = ...;
+@CoarseVertex float nDotL = dot( N, L ); // error!
+\end{spark}
+\end{codeblock}
+The rules for what kinds of rate conversion are allowed (or not) are not baked into the Spark compiler, but are instead defined in standard library and user code as \emph{plumbing operators}.
+
+We will discuss user-defined plumbing operators in more detail in Section \ref{sec:projectionguide}.
+For now, it is enough to know that several plumbing operators are defined as part of the Direct3D~11 pipeline interface.
+For example, conversion from per-vertex to per-fragment rate is made possible by the \code{CoarseToFine()} plumbing operator:
+\begin{codeblock}
+\begin{spark}
+implicit
+@FineVertex T CoarseToFine[
+    type T,
+    implicit Linear[T] ](
+    @CoarseVertex T value );
+\end{spark}
+\end{codeblock}
+The declaration of this operator may be a little intimidating, so we will look at it in parts:
+\begin{itemize}
+\item{The name of the operator is \code{CoarseToFine}}
+\item{It is parameterized on a type \code{T}}
+\item{It also is parameterized on a \emph{concept} \code{Linear[T]} (we'll cover concepts later)}
+\item{It takes a value of type \code{T} with \code{@CoarseVertex} rate as input and returns a value with the \code{@FineVertex} rate}
+\item{It is declared \kw{implicit} which means it can be invoked as part of implicit type/rate conversion}
+\end{itemize}
+
+\section{Records and Rates}
+\label{sec:recorddeclguide}
+
+In order to understand the more advanced features of the Spark language, it is important to understand the idea of \emph{record types} and how they relate to the \emph{rates} like \code{@Fragment}.
+Here we have a small example of how to use records:
+\begin{codeblock}
+\begin{spark}
+abstract shader class SimpleRecord extends D3D11DrawPass
+{
+    record Light;
+    input @Light float3 L;
+    input @Light float3 N;
+    @Light float nDotL = max( 0, dot( N, L ) );
+
+    float ComputeLighting( float3 normal, float3 lightDir, float4 diffuse );
+    {
+        Light aLight = Light( L: lightDir, N: normal );
+        return diffuse * ( nDotL @ aLight );
+    }
+}
+\end{spark}
+\end{codeblock}
+
+A record is kind of like a struct that gets declared ``inside out.''
+To see how, we can compare the above Spark record declaration of the \code{Light} record to the following C++ \kw{struct}:
+\begin{codeblockx}{C++}
+\begin{cplusplus}
+struct Light
+{
+	float3 L;
+	float3 N;
+	float nDotL;
+	
+	Light( float3 L, float3 N )
+	{
+		this->L = L;
+		this->N = N;
+		this->nDotL = max( 0, dot( this->N, this->L ) );
+	}
+};
+
+float ComputeLighting( float3 normal, float3 lightDir, float4 diffuse );
+{
+    Light aLight = Light( lightDir, normal );
+    return diffuse * ( aLight.nDotL );
+}
+\end{cplusplus}
+\end{codeblockx}
+
+When we first declare a record type:
+\begin{codeblock}
+\begin{spark}
+record Light;
+\end{spark}
+\end{codeblock}
+this creates a record type \code{Light}, but does not indicate what fields the record type has.
+It \emph{also} creates a rate \code{@Light} for per-light computation.
+
+We can then add fields to the \code{Light} record type by declaring attributes with the \code{@Light} rate:
+\begin{codeblock}
+\begin{spark}
+input @Light float3 L;
+input @Light float3 N;
+@Light float nDotL = max( 0, dot( N, L ) );
+\end{spark}
+\end{codeblock}
+Each attribute declaration in Spark corresponds to several parts of the C++ \kw{struct} declaration:
+\begin{itemize}
+\item{An \kw{input} attribute like \code{L} or \code{N} corresponds to both a field of the C++ struct and an argument to the struct constructor}
+\item{A non-input attribute like \code{nDotL} corresponds to a field of the C++ struct, and to code in the struct constructor}
+\end{itemize}
+
+To construct an instance of a record type:
+\begin{codeblock}
+\begin{spark}
+Light aLight = Light( L: lightDir, N: normal );
+\end{spark}
+\end{codeblock}
+we use \code{key: value} parameter-passing syntax to specify a value for each of the \kw{input} attributes of the \code{Light} record.
+
+\section{Projection}
+
+Once we have an instance of the \code{Light} record type, we can get the value of one of its fields using an operation called \emph{projection}:
+\begin{codeblock}
+\begin{spark}
+return diffuse * ( nDotL @ aLight );
+\end{spark}
+\end{codeblock}
+Here the expression \code{nDotL @ aLight} yields the value of the \code{nDotL} attribute of the \code{aLight} record.
+It is similar in spirit to the C++ expression \code{aLight.nDotL}, although the semantics are not precisely the same.
+
+\section{Other Language Syntax}
+
+For the most part, Spark has syntax for expressions and statements that should be familiar to users of C, C++, Java, C\#, or HLSL.
+We will call out some of the more important differences, though:
+\begin{itemize}
+\item{Spark does not have built-in syntax for pointer (\code{int *}), reference (\code{int &}), or array types (\code{int[3]}). Arrays in D3D11 shader code are written like \code{Array[int,3]}}
+\item{Spark uses square brackets \code{[]} instead of angle brackets \code{<>} to enclose generic or ``template'' arguments. This syntax is taken from the Scala language}
+\item{As a result of using \code{[]} for generic arguments/parameters, Spark uses ordinary parenthesis \code{()} for indexing arrays or buffers. You can think of an array as a function from indices to values}
+\item{In Spark, a binary expression like \code{a + b} is \emph{just} syntactic sugar for \code{operator+(a, b)}. This is similar to operator overloading in C++, but without any special-case rules for builtin types.}
+\item{Spark supports standard control-flow statements like \kw{if} and \kw{return}, but some are currently unimplemented (\kw{while}, \kw{switch})}
+\item{Spark's \kw{for} statment currently supports only a ``range-based for'' as described in Section \ref{sec:rangebasedfor}}
+\end{itemize}
+
+\chapter{Spark for Direct3D 11 Reference}
+\label{chap:d3d11-ref}
+
+In this chapter, we will document all of the built-in types, records/rates, and attributes exposed by the Spark interface to the Direct3D~11 (D3D11) pipeline.
+
+\section{Types}
+
+In general, Spark exposes the same types as HLSL and the HLSL Effect system.
+These include basic scalar types, vectors, matrices, and resource handles.
+In addition, Spark supports some types that do not appear in HLSL.
+
+\begin{note}
+The Spark standard library is not yet feature-complete, so some HLSL types and operations are not currently exposed.
+We will attempt to note when this is the case.
+\end{note}
+
+In this section, we will describe common types, while types that are primarily associated with a single pipeline stage will be discussed together with that stage.
+
+\subsection{Basic Types}
+
+The set of basic scalar types in Spark are similar to those in HLSL:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{type bool;}   \desc{Boolean truth value}
+\decl{type ubyte;}	\desc{8-bit unsigned integer}		
+\decl{type unorm;}	\desc{8-bit normalized value (0-1 range)}	
+\decl{type ushort;} \desc{16-bit unsigned integer}		
+\decl{type uint;}	\desc{32-bit unsigned integer}			
+\decl{type int;}	\desc{32-bit signed integer}			
+\decl{type float;}	\desc{32-bit floating-point}			
+\end{tabularx}
+\end{stdlibx}
+
+\begin{note}
+There are clearly gaps in this list. In particular, we do not currently support \code{byte}, \code{short}, \code{half}, or \code{double}.
+\end{note}
+
+\begin{note}
+Some of these types -- e.g., \code{unorm} -- are primarily intended to be used for defining in-memory vertex layouts. They do not have mathematical operators defined for them, and must be converted to \code{float} first.
+\end{note}
+
+\subsection{Array Type}
+
+Fixed-size arrays are exposed as a built-in generic type:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{type Array[type T, @Constant int Length];}
+    \desc{Array of \code{Length} elements of type \code{T}}
+\end{tabularx}
+\end{stdlibx}
+Note that the array length \code{Length} may be any \code{@Constant} value, not just a literal.
+
+Arrays can be indexed using \code{()}, and within a procedure we may assign to the elements of local array variables:
+\begin{codeblock}
+\begin{spark}
+Array[float, 4] a = ...;
+float e = a(2);
+a(3) = 4.0;
+\end{spark}
+\end{codeblock}
+
+Arrays can be constructed using an explicit list of elements:
+\begin{codeblock}
+\begin{spark}
+Array[float, 4] a = Array[float]( 0.0, 1.0, 2.0, 3.0 );
+\end{spark}
+\end{codeblock}
+
+\begin{note}
+At present, arrays are handled as a library type rather than built in to the compiler.
+An unfortunate side effect of this is that the array constructor syntax above is hard coded in the standard library for certain lengths.
+Right now, only 2-, 3-, 4-, and 16-element arrays can be constructed this way.
+\end{note}
+
+\subsection{Vector Types}
+
+Like HLSL, Spark exposes simple short vector types composed of scalars:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{type ubyte4;}	 \desc{4-component vector of \code{ubyte}s}	
+\decl{type unorm4;}	 \desc{4-component vector of \code{unorm}s}	
+\decl{type uint4;}	 \desc{4-component vector of \code{uint}s}	
+\decl{type float2;}	 \desc{2-component vector of \code{float}s}	
+\decl{type float3;}	 \desc{3-component vector of \code{float}s}	
+\decl{type float4;}	 \desc{4-component vector of \code{float}s}
+\end{tabularx}
+\end{stdlibx}
+
+\begin{note}
+These are the only vector types currently exposed.
+Support for mathematical operators on these types is incomplete, with \code{float3} and \code{float4} having the best level of support.
+\end{note}
+
+\begin{note}
+Only a subset of ``swizzle'' operations are currently supported.
+It should be possible to get single elements out of \code{float} vectors, as well as to use \code{.xy} and \code{.xyz} on \code{float3} and \code{float4} values, respectively.
+\end{note}
+
+\subsection{Matrix Types}
+
+We support a small number of HLSL's matrix types:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{type float3x3;}	 \desc{3x3 matrix of \code{float}s}					
+\decl{type float4x3;}	 \desc{4x3 matrix of \code{float}s}					
+\decl{type float4x4;}	 \desc{4x4 matrix of \code{float}s}					
+\end{tabularx}
+\end{stdlibx}
+
+\begin{note}
+As with the other types, only those operations that have been encountered in workloads so far have been exposed through Spark.
+\end{note}
+
+\subsection{Resource and State Types}
+
+We expose a basic set of shader resource types:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{type Texture2D[type T];}	 \desc{2D texture with texels of type \code{T}}					
+\decl{type TextureCube[type T];}	 \desc{Cube-map texture with texels type \code{T}}				
+\decl{type Buffer[type T];}		 \desc{1-dimensional buffer with elements of type \code{T}}
+\decl{type SamplerState;}		 \desc{Texture-sampler state}						
+\end{tabularx}
+\end{stdlibx}
+
+\begin{note}
+Unlike HLSL, the generic parameter \code{T} on \code{Texture2D} and \code{TextureCube} is \emph{required}.
+An HLSL \code{Texture2D} variable would thus correspond to a Spark \code{Texture2D[float4]}.
+\end{note}
+
+Sampling from resources is accomplished with built-in functions.
+Texture sampling with implicit derivatives can only be performed per-fragment:
+\begin{stdlibx}
+\begin{tabular}{|l|l|}
+\stdlibheader
+\begin{blockdecl}
+@Fragment float3 Sample(
+    @Fragment Texture2D[float3] t,
+    @Fragment SamplerState s,
+    @Fragment float2 v );
+\end{blockdecl}
+    & \desc{Sample 2D \code{float3} texture}
+\begin{blockdecl}
+@Fragment float4 Sample(
+    @Fragment Texture2D[float4] t,
+    @Fragment SamplerState s,
+    @Fragment float2 v );
+\end{blockdecl}
+    & \desc{Sample 2D \code{float4} texture}
+\begin{blockdecl}
+@Fragment float4 Sample(
+    @Fragment TextureCube[float4] t,
+    @Fragment SamplerState s,
+    @Fragment float3 v );
+\end{blockdecl}
+    & \desc{Sample cube-map \code{float4} texture}
+\end{tabular}
+\end{stdlibx}
+
+while sampling with an explicit level can be performed at any rate:
+\begin{stdlibx}
+\begin{tabular}{|l|l|}
+\stdlibheader
+\begin{blockdecl}
+T SampleLevel[type T](
+    Texture2D[T] t,
+    SamplerState s,
+    float2 v,
+    float level );
+\end{blockdecl}
+    & \desc{Sample 2D texture at explicit level}
+\end{tabular}
+\end{stdlibx}
+Finally, \code{Buffer}s are indexed using \code{()}, just as for arrays:
+\begin{stdlibx}
+\begin{tabular}{|l|l|}
+\stdlibheader
+\begin{blockdecl}
+T operator()[type T](
+    Buffer[T] buffer,
+    uint index );
+\end{blockdecl}&
+\desc{Sample buffer at index}
+\end{tabular}
+\end{stdlibx}
+
+\begin{note}
+We have only exposed a small subset of the available texture-sampling operations supported by Direct3D 11.
+\end{note}
+
+
+\subsection{Linear Concept}
+
+In many cases, it is possible to define a plumbing operator as a linear operator.
+For example, many interpolation schemes simply perform a weighted sum of inputs.
+We would like to be able to define such an operator once, and have it apply to any type \code{T} for which the idea of a ``weighted sum'' is well-defined.
+To that end, we have the \code{Linear} concept:
+\begin{stdlibx}
+\begin{tabular}{|l|l|}
+\stdlibheader
+\begin{blockdecl}
+concept Linear[type T]
+{
+	abstract T operator+(
+        T left, T right );
+	abstract T operator-(
+        T left, T right );
+	abstract T operator*(
+        T left, float right );
+}
+\end{blockdecl}
+    & \desc{Concept of ``linear'' types \code{T}}
+\end{tabular}
+\end{stdlibx}
+
+Any type \code{T} that supports addition, subtraction, and multiplication by a scalar (on the right) supports the \code{Linear} concept.
+As an example of how linearity can be used, the standard library includes a \code{lerp()} function that is applicable to any type that supports \code{Linear}:
+\begin{stdlibx}
+\begin{tabular}{|l|l|}
+\stdlibheader
+\begin{blockdecl}
+T lerp[
+    type T,
+    implicit Linear[T]](
+    T v0, T v1,
+    float a )
+{
+	return v0 + (v1 - v0) * a;
+}
+\end{blockdecl}
+    & \desc{Linear interpolation for any \code{Linear} type \code{T}}
+\end{tabular}
+\end{stdlibx}
+
+\subsection{Ranges}
+\label{sec:rangebasedfor}
+We include a type for ranges: one-dimensional intervals of the form $[low,high)$:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{type Range;} \desc{Type of $[low,high)$ ranges}
+\decl{Range Range( int lower, int upper );} \desc{Construct a range}
+\end{tabularx}
+\end{stdlibx}
+
+The \code{Range} type is used when writing a \kw{for} loop, to specify the iteration range:
+\begin{codeblock}
+\begin{spark}
+for( i in Range(0,N) )
+{
+    // loop body
+}
+\end{spark}
+\end{codeblock}
+
+\section{Constants and Uniforms}
+
+A Spark shader class for the Direct3D 11 pipeline can have two kinds of parameters: constant and uniform.
+Constant parameters must be fully specified at the time an instance of the shader class is created, while uniform parameters may be set every time the instance is used for rendering.
+We expose this using two record types:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{record Constant;}  \desc{Defines the \code{@Constant} rate}
+\decl{record Uniform;}  \desc{Defines the \code{@Uniform} rate}
+\end{tabularx}
+\end{stdlibx}
+
+Conceptually, an \code{input @Uniform} value represents a shader parameter, and any \code{@Uniform} computation is performed once per draw call, on the CPU.
+Both constant and uniform attributes are available to computations at any programmable pipeline stage.
+There are suitable plumbing operators defined in the standard library (which are not interesting enough to list here).
+
+\begin{note}
+While it is planned that shader classes will support \code{@Constant} parameters, there is currently no way through the C++ API to set values for these parameters.
+As such, a concrete shader class to be used for rendering should bind values to all of its \code{@Constant} attributes.
+\end{note}
+
+\section{Input Assembler}
+
+The Input Assembler (IA) is a fixed-function stage responsible for gathering vertex data from memory, and also determining the number and type of primitives to be drawn.
+
+\subsection{Vertex Streams}
+
+An input stream of vertices is then defined using the \code{VertexStream} generic type:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{type VertexStream[type T];}
+	\desc{Stream of vertices of type \code{T}}
+\end{tabularx}
+\end{stdlibx}
+In the Spark shader, we can index the \code{VertexStream} using \code{()}:
+
+Fetching of vertices should be performed at the \code{@AssembledVertex} rate:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{record AssembledVertex;}              \desc{Type of vertices output by the IA}
+\end{tabularx}
+\end{stdlibx}
+
+Two system-defined attributes are provided for use in indexing vertex streams:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|l|X|}
+\stdlibheader
+\longdecl{@AssembledVertex uint IA_VertexID}    \desc{Corresponds to \code{D3D11_INPUT_PER_VERTEX_DATA}}
+\longdecl{@AssembledVertex uint IA_InstanceID}  \desc{Corresponds to \code{D3D11_INPUT_PER_INSTANCE_DATA}}
+\end{tabularx}
+\end{stdlibx}
+
+\subsection{Draw Span}
+
+Along with defining how to fetch vertices from memory, the IA is also responsible for defining the number and type of primitives to draw.
+In Spark, all of this information is packaged up in a single \code{@Uniform} attribute:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{type DrawSpan;} \desc{Type of ``spans'' to draw}
+\longdecl{abstract @Uniform DrawSpan IA_DrawSpan;} \desc{The span to draw in this pass}
+\end{tabularx}
+\end{stdlibx}
+
+A \code{DrawSpan} is created in C++ code using the \code{IndexedDrawSpan()} function:
+\begin{stdlibx}
+\begin{tabular}{|l|l|}
+\stdlibheader
+\begin{blockdecl}
+DrawSpan spark::d3d11::IndexedDrawSpan(
+    D3D11_PRIMITIVE_TOPOLOGY primTopo,
+    ID3D11Buffer* indexBuffer,
+    DXGI_FORMAT indexFormat,
+    UINT indexCount,
+    UINT indexStart,
+    UINT vertexStart );
+\end{blockdecl}
+    & \desc{Create a draw span}
+\end{tabular}
+\end{stdlibx}
+
+\begin{note}
+Right now, the \code{IndexedDrawSpan()} function is the only convenient way to create a \code{DrawSpan}.
+Additional wrapper functions will be defined to correspond to the other \code{ID3D11DeviceContext::Draw*()} entry points.
+\end{note}
+
+
+\section{Vertex Shader}
+
+Code that runs in the Vertex Shader (VS) pipeline stage can be created by defining attributes at the \code{@CoarseVertex} rate:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{record CoarseVertex;}                 \desc{Type of vertices output by VS}
+\end{tabularx}
+\end{stdlibx}
+
+Computations with the \code{@CoarseVertex} rate may freely refer to \code{@Constant}, \code{@Uniform}, and \code{@AssembledVertex} attributes.
+In addition, \code{@CoarseVertex} computations may also make use of two built-in attributes:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{@CoarseVertex uint VS_VertexID;}      \desc{Equivalent to HLSL \code{SV\_VertexID} input}
+\decl{@CoarseVertex uint VS_InstanceID;}    \desc{Equivalent to HLSL \code{SV\_InstanceID} input}
+\end{tabularx}
+\end{stdlibx}
+
+\section{Rasterizer}
+
+The Rasterizer (RS) pipeline stage is responsible for generating fragments from primitives.
+Depending on whether tessellation or Geometry Shaders are enabled, the vertices of these primitives might be computed by the Vertex, Domain or Geometry Shader stage.
+In order to abstract over this variation, Spark exposes a single record type and corresponding rate for attributes that should be computed once per rasterized vertex:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{record RasterVertex;}                 \desc{Type of vertices consumed by RS}
+\end{tabularx}
+\end{stdlibx}
+
+In order to drive the rasterizer, a shader must override the \kw{abstract} attribute \code{RS\_Position}:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{abstract @RasterVertex float4 RS\_Position;}      \desc{Equivalent to HLSL \code{SV\_Position} output}
+\end{tabularx}
+\end{stdlibx}
+
+\begin{note}
+Spark does not currently expose the fixed-function rasterization state to shader writers.
+This will be fixed in a future release.
+At present, a Spark shader will always render using whatever rasterization state is bound to the device context.
+\end{note}
+
+\section{Pixel Shader}
+
+The Pixel Shader (PS) pipeline stage takes the fragments rasterized by the Rasterizer and shades them.
+Note that there is a discrepancy in this name of this stage: the \emph{Pixel} Shader shades \emph{fragments}:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{record Fragment;}                 \desc{Type of fragments generated by PS}
+\end{tabularx}
+\end{stdlibx}
+Attributes with the \code{@Fragment} rate can be used to compute color values, fetch textures, etc.
+
+\begin{note}
+Spark does not currently support shaders that write an explicit per-fragment depth.
+\end{note}
+
+\begin{note}
+Spark does not currently support per-sample shading or shader access to coverage information.
+\end{note}
+
+\section{Output Merger}
+
+The Output Merger (OM) is a fixed-function stage that takes the fragments shaded by the PS, tests them against depth/stencil buffers, and conditionally composites them onto pixels (or in the case of MSAA, sample) in one or more render targets.
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{record Pixel;}                 \desc{Type of pixels composited by the OM}
+\end{tabularx}
+\end{stdlibx}
+A Spark shader writes to a render target by declaring a \code{output @Pixel} attribute.
+
+\begin{note}
+Spark does not currently support non-default blend modes.
+\end{note}
+
+\subsection{Depth/Stencil Testing}
+
+The OM tests each fragment against the depth and stencil buffers.
+In Direct3D~11, these two buffers are bound using a single ``view,'' which is exposed as a built-in attribute in Spark:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{type DepthStencilView;} \desc{Corresponds to C++ \code{ID3D11DepthStencilView*}}
+\longdecl{input @Uniform DepthStencilView depthStencilView;}	\desc{Depth-stencil view to use}
+\end{tabularx}
+\end{stdlibx}
+
+Since this attribute is an \code{input @Uniform} it serves as a shader parameter that can be set from C++ code:
+\begin{codeblock}
+\begin{cplusplus}
+ID3D11DepthStencilView* dsv = ...;
+shader->SetDepthStencilView( dsv );
+\end{cplusplus}
+\end{codeblock}
+
+\begin{note}
+Spark does not currently expose the fixed-function depth/stencil state to shader writers.
+This will be fixed in a future release.
+At present, a Spark shader will always render using whatever depth/stencil state is bound to the device context.
+\end{note}
+
+\section{Tessellation}
+
+By default a Spark shader class does not make use of tessellation.
+At the same time, though, a well-written shader class can often be \emph{combined} with a separately-developed tessellation effect.
+
+\subsection{Enabling Tessellation}
+A concrete shader class that uses tessellation must inherit from one of the following \kw{mixin} shader classes:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{abstract mixin shader class D3D11QuadTessellation}
+    \desc{Enables tessellation of quadrilateral patches}
+\longdecl{abstract mixin shader class D3D11TriTessellation}
+    \desc{Enables tessellation of triangle patches}
+\end{tabularx}
+\end{stdlibx}
+
+The choice of tessellation domain affects the definition of several system-provided \code{@Constant} attributes:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{@Constant int HS_PatchEdgeCount;}
+    \desc{\code{4} for quadrilateral and \code{3} for triangle domain}
+\decl{@Constant int HS_PatchInsideCount;}
+    \desc{\code{2} for quadrilateral and \code{1} for triangle domain}
+\decl{@Constant int HS_PatchCornerCount;}
+    \desc{\code{4} for quadrilateral and \code{3} for triangle domain}
+\end{tabularx}
+\end{stdlibx}
+
+\begin{note}
+Spark does not yet support iso-line tessellation.
+\end{note}
+
+A shader class that requires tessellation to be enabled, but that is independent of the particular tessellation domain (triangle or quadrilateral), may inherit from:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{abstract mixin shader class D3D11Tessellation}
+    \desc{Common base class for different tessellation schemes}
+\end{tabularx}
+\end{stdlibx}
+Most of the types and attributes required to define a tessellation effect are defined by this shader class.
+
+The crux of writing a tessellation technique in Spark is providing a suitable plumbing operator from the \code{@CoarseVertex} to the \code{@FineVertex} rate.
+This plumbing operator is declared in \code{D3D11DrawPass}, and any shader class that uses tessellation must override it:
+\begin{stdlibx}
+\begin{tabular}{|l|l|}
+\stdlibheader
+\begin{blockdecl}
+implicit abstract
+@FineVertex T CoarseToFine[
+    type T,
+    implicit Linear[T] ](
+    @CoarseVertex T value );
+\end{blockdecl}
+    & \desc{Plumb a \code{Linear} value from coarse to fine vertices}
+\end{tabular}
+\end{stdlibx}
+
+Any shader class that does not use tessellation will automatically get a default implementation of this operator.
+
+\subsection{Disabling Tessellation}
+
+As stated above, any shader class that does not use tessellation gets a default implementation of \code{CoarseToFine()} that works for any type that supports the \code{Linear} concept.
+In some cases, however, a shader needs to plumb arbitrary values from coarse vertices through the pipeline.
+This can be achieved by explicitly opting out of the tessellation stages completely, by inheriting from:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{abstract mixin shader class D3D11NullTessellation}
+    \desc{Disables use of tessellation stages}
+\end{tabularx}
+\end{stdlibx}
+
+The \code{D3D11NullTessellation} shader class defines an additional plumbing operator that applies to attributes of any type:
+\begin{stdlibx}
+\begin{tabular}{|l|l|}
+\stdlibheader
+\begin{blockdecl}
+implicit virtual
+@FineVertex T CoarseToFine[
+    type T ](
+    @CoarseVertex T value );
+\end{blockdecl}
+    & \desc{Plumb any value from coarse to fine vertices}
+\end{tabular}
+\end{stdlibx}
+
+\subsection{Hull Shader}
+
+The Hull Shader (HS) stage is responsible for taking an array of input coarse vertices, and producing the properties of one patch primitive and its control points.
+The Hull Shader computes some attributes for each patch, some for each control point, and others for each edge, corner or interior axis.
+It is not surprising, then, that the Spark interface to the HS exposes a large number of rates of computation:
+
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{record InputPatch;}       \desc{Defines the rate of per-input-patch computation}
+\decl{record ControlPoint;}     \desc{Defines the rate of per-control-point computation}
+\decl{record PatchCorner;}      \desc{Defines the rate of per-patch-corner computation}
+\decl{record PatchEdge;}        \desc{Defines the rate of per-edge computation}
+\decl{record PatchInterior;}    \desc{Defines the rate of per-interior-axis computation}
+\decl{record OutputPatch;}      \desc{Defines the rate of per-output-patch computation}
+\end{tabularx}
+\end{stdlibx}
+
+\subsubsection{Input Patch}
+
+Attributes defined at the \code{@InputPatch} rate will be visible to all other rates in the Hull Shader stage.
+This can be used to set up values that will be used in both per-output-patch and per-control-point computation.
+For example, we might use this rate when loading a packed representation of input topology.
+
+A shader class that uses tessellation must specify the number of vertices in each assembled primitive:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{abstract @Constant int HS_InputCoarseVertexCount;}
+    \desc{Number of coarse vertices per assembled primitive}
+\end{tabularx}
+\end{stdlibx}
+
+In order to compute per-patch attributes, the \code{@InputPatch} rate has access to both a patch ID and the array of input coarse vertices:
+
+\begin{stdlibx}
+\begin{tabular}{|l|l|}
+\stdlibheader
+\decl{@InputPatch uint HS_PatchID;} \desc{Corresponds to HLSL \code{SV\_PrimitiveID}}
+\begin{blockdecl}
+input @InputPatch Array[
+    CoarseVertex,
+    HS_InputCoarseVertexCount]
+    HS_InputCoarseVertices;
+\end{blockdecl}
+    & \desc{Array of input vertices}
+\end{tabular}
+\end{stdlibx}
+
+
+\subsubsection{Control Points}
+
+Attributes defined at the \code{@ControlPoint} rate have access to all \code{@InputPatch} attributes, along with a per-control-point ID:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{@ControlPoint uint HS_ControlPointID;}
+    \desc{Corresponds to HLSL \code{SV\_ControlPointID}}
+\end{tabularx}
+\end{stdlibx}
+
+A shader class that uses tessellation must specify the number of control points in each patch:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{abstract @Constant int HS_OutputControlPointCount;}
+    \desc{Corresponds to HLSL \code{[outputcontrolpoints()]}}
+\end{tabularx}
+\end{stdlibx}
+
+\subsubsection{Patch Corners}
+
+Attributes with the \code{@PatchCorner} rate have access to all \code{@InputPatch} attributes, and can be used to compute values that should be stored once per patch corner.
+For example, when rendering a tessellated quadrilateral patch, we may want to store position data at each of 16 control points, but only store texture coordinates at the 4 patch corners.
+
+In order to enable per-corner computations, the system provides a per-patch-corner ID:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{@PatchCorner uint HS_PatchCornerID;} \desc{ID of patch corner}
+\end{tabularx}
+\end{stdlibx}
+
+\subsubsection{Patch Edges}
+
+Attributes with the \code{@PatchEdge} rate have access to all \code{@InputPatch} attributes.
+These attributes can be used to store user-defined data along each patch edge.
+In addition, though, a shader must specify the per-edge tessellation factor:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{abstract @PatchEdge float HS_EdgeFactor;}
+    \desc{Tessellation rate along edge}
+\end{tabularx}
+\end{stdlibx}
+
+In order to enable per-edge computations, the system provides a per-edge ID:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{@PatchEdge uint HS_PatchEdgeID;} \desc{ID of patch edge}
+\end{tabularx}
+\end{stdlibx}
+as well as access to an array of the patch corners:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{@OutputPatch Array[PatchCorner, HS_PatchCornerCount] HS_PatchCorners;}
+    \desc{Corners of patch}
+\end{tabularx}
+\end{stdlibx}
+
+
+\subsubsection{Patch Interior Axes}
+
+A triangle patch has one tessellation rate for its interior, while a quadrilateral patch has one for each of the $u$/$v$ parameter axes.
+To support this we allow for computations at a \code{@PatchInterior} rate, and shaders need to write a per-interior-axis tessellation factor:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{abstract @PatchInterior float HS_InsideFactor;}
+    \desc{Tessellation rate in interior}
+\end{tabularx}
+\end{stdlibx}
+Patch-interior computations have access to all \code{@InputPatch} attributes, along with the \code{HS\_PatchCorners} array, and an array of patch edges:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{@OutputPatch Array[PatchEdge, HS_PatchEdgeCount] HS_PatchEdges;}
+    \desc{Edges of patch}
+\end{tabularx}
+\end{stdlibx}
+
+%	abstract @FineVertex T CoarseToFine[type T, implicit Linear[T]]( @CoarseVertex T value );
+
+\subsubsection{Output Patch}
+
+Attributes defined at the \code{@OutputPatch} rate have access to all \code{@InputPatch} attributes, as well as the arrays of patch corners (\code{HS\_PatchCorners}), edges (\code{HS\_PatchEdges}), and interior axes:
+\code{HS\_PatchCorners} array, and an array of patch edges:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{@OutputPatch Array[PatchInterior, HS_PatchInsideCount] HS_PatchInteriors;}
+    \desc{Interior axes of patch}
+\end{tabularx}
+\end{stdlibx}
+
+A shader may elect to cull patches according to some criteria by overriding the pre-defined output \code{HS\_CullPatch}:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{virtual @OutputPatch bool HS_CullPatch = false;}
+    \desc{Controls whether patch is culled by HS}
+\end{tabularx}
+\end{stdlibx}
+
+\begin{note}
+An HLSL Hull Shader ``patch constant function'' may access the array of control points created in the ``control point function.''
+Spark does not yet support this flexibility (which would manifest as \code{@OutputPatch} attributes having access to an array of \code{ControlPoint} records).
+\end{note}
+
+
+\subsection{Tessellator}
+
+The fixed-function Tessellator (TS) stage supports only a few options, which must be specified at compile time.
+These options are exposed as \code{@Constant} attributes:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{virtual @Constant float TS_MaxTessFactor = 64.0f;}
+    \desc{Maximum tessellation factor that will be used}
+\longdecl{abstract @Constant TessellationPartitioning TS_Partitioning;}
+    \desc{Tessellation partitioning scheme}
+\longdecl{abstract @Constant TessellationOutputTopology TS_OutputTopology;}
+    \desc{Tessellation output topology}
+\end{tabularx}
+\end{stdlibx}
+
+\begin{note}
+At present, \code{TS\_Partitioning} must be set to either \code{FractionalOddPartitioning} or \code{IntegerPartitioning}.
+The only supported value for \code{TS\_OutputTopology} is currently \code{TriangleCWTopology}.
+\end{note}
+
+
+\subsection{Domain Shader}
+
+The Domain Shader (DS) stage is responsible for taking the output of the HS, along with a single ``domain location'' output by the TS, and using these to evaluate the attributes of a post-tessellation vertex.
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{record FineVertex;} \desc{Type of DS output vertices}
+\end{tabularx}
+\end{stdlibx}
+
+To that end, computations at the \code{@FineVertex} rate have access to any \code{@OutputPatch} attributes, including in particular:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{@OutputPatch Array[float, HS_PatchEdgeCount] HS_EdgeFactors;}
+    \desc{Per-edge tessellation factors}
+\longdecl{@OutputPatch Array[float, HS_PatchInsideCount] HS_InsideFactors;}
+    \desc{Per-interior-axis tessellation factors}
+\longdecl{@OutputPatch Array[PatchCorner, HS_PatchCornerCount] HS_PatchCorners;}
+    \desc{Per-patch-corner data}
+\end{tabularx}
+\end{stdlibx}
+as well at the array of \code{ControlPoint} records output by the HS:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{@FineVertex Array[ControlPoint, HS_OutputControlPointCount] DS_InputControlPoints;}
+    \desc{Control points for a DS input patch}
+\end{tabularx}
+\end{stdlibx}
+Finally, the shader also has access to a domain location:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{@FineVertex float2 DS_DomainLocation;}
+    \desc{For quadrilateral domain}
+\decl{@FineVertex float3 DS_DomainLocation;}
+    \desc{For triangle domain}
+\end{tabularx}
+\end{stdlibx}
+
+%\subsection{Plumbing}
+%TODO: Write this section!
+
+
+\section{Geometry Shader}
+
+As with tessellation, a Spark shader class does not, by default, make use of the Geometry Shader (GS) pipeline stage.
+A shader class opts in to use of the GS by inheriting from:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{abstract mixin shader class D3D11GeometryShader}
+    \desc{Enables use of Geometry Shader stage}
+\end{tabularx}
+\end{stdlibx}
+
+\begin{figure}
+\begin{spark}
+shader class RenderToCubeMap extends BasicSpark11,
+                                     D3D11GeometryShader
+{
+    input @Uniform Array[float4x4, 6] cubeMapViews;
+
+    // GS Procedure
+    //
+    override GS_InputVertexCount = 3;
+    override GS_MaxOutputVertexCount = 3;
+    override @GeometryOutput void GeometryShader()
+    {
+        Append( GS_OutputStream,
+            RasterVertex( myFineVertex: GS_InputVertices(0) ) );
+        Append( GS_OutputStream,
+            RasterVertex( myFineVertex: GS_InputVertices(1) ) );
+        Append( GS_OutputStream,
+            RasterVertex( myFineVertex: GS_InputVertices(2) ) );
+    }
+
+    // Plumbing
+    //
+    input @RasterVertex FineVertex myFineVertex;
+    override @RasterVertex T FineToRaster[type T]( @FineVertex T value )
+    {
+        return value @ myFineVertex;
+    }
+
+    // Instancing
+    //
+    override GS_InstanceCount = 6;
+    override RenderTargetArrayIndex = GS_InstanceID;
+    override view = cubeMapViews(GS_InstanceID);
+}
+\end{spark}
+\caption{\label{fig:d3d-rendertocubemap}The \code{RenderToCubeMap} shader class}
+\end{figure}
+
+When a concrete shader class inherits from \code{D3D11GeometryShader} it is responsible for overriding both the GS procedure, and a plumbing operator from \code{@RasterVertex} to \code{@FineVertex}.
+Figure~\ref{fig:d3d-rendertocubemap} shows a simple Spark shader class that uses the Geometry Shader.
+
+\subsection{Geometry Shader Procedure}
+
+The GS procedure is responsible for looking at the fine vertices of an input primitive, and outputting zero or more raster vertices:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{record GeometryInput;} \desc{Defines the rate for GS input}
+\decl{record GeometryOutput;} \desc{Defines the rate at which the GS is invoked}
+\longdecl{abstract @GeometryOutput void GeometryShader();}
+    \desc{Defines the procedural behavior of the GS stage}
+\end{tabularx}
+\end{stdlibx}
+
+While the \code{GeometryShader()} procedure has no parameters, it has access to attributes for both the vertices of an input primitive, and a stream to which it can write output vertices:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{@GeometryInput Array[FineVertex, GS_InputVertexCount] GS_InputVertices;}
+    \desc{Vertices of GS input primitive}
+\longdecl{@GeometryOutput Stream[RasterVertex] GS_OutputStream;}
+    \desc{Stream of GS output vertices}
+\end{tabularx}
+\end{stdlibx}
+
+Before writing this procedure, you will want to specify values for two attributes that control the GS:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{abstract @Constant int GS_InputVertexCount;}
+    \desc{Number of vertices per GS input primitive}
+\longdecl{abstract @Constant int GS_MaxOutputVertexCount;}
+    \desc{Maximum GS output vertices per input primitive}
+\end{tabularx}
+\end{stdlibx}
+
+\begin{note}
+Due to a bug in the Spark compiler, the overriding declarations for \code{GS\_InputVertexCount} and \code{GS\_MaxOutputVertexCount} should appear before that for \code{GeometryShader()}.
+Ideally, put these declarations at the top of any shader class that needs them.
+\end{note}
+
+The \code{Stream[]} type supports a few operations:
+\begin{stdlibx}
+\begin{tabular}{|l|l|}
+\stdlibheader
+\decl{type Stream[type T];} \desc{Stream of vertices output by GS}
+\begin{blockdecl}
+void Append[type T](
+    Stream[T] stream,
+    T value );
+\end{blockdecl}
+    & \desc{Append a vertex to \code{stream}}
+\begin{blockdecl}
+void RestartStrip[type T](
+    Stream[T] stream );
+\end{blockdecl}
+    & \desc{Start a new primitive strip on \code{stream}}
+\end{tabular}
+\end{stdlibx}
+
+\begin{note}
+Currently, Spark only supports GS procedures that take triangles as input and produce triangles.
+\end{note}
+
+\subsection{Plumbing}
+
+When a shader class uses the GS stage (by inheriting from \code{D3D11GeometryShader}), it must provide an overriding definition for the \code{FineToRaster()} plumbing operator:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{abstract @RasterVertex T FineToRaster[type T]( @FineVertex T value );}
+    \desc{Plumbs any value from fine to raster vertices}
+\end{tabularx}
+\end{stdlibx}
+
+Typically this is achieved by defining an input attribute of type \code{FineVertex} at the \code{@RasterVertex} rate:
+\begin{codeblock}
+\begin{spark}
+input @RasterVertex FineVertex myFineVertex;
+\end{spark}
+\end{codeblock}
+The value for this attribute is specified for each \code{RasterVertex} we construct in our GS procedure:
+\begin{codeblock}
+\begin{spark}
+Append( GS_OutputStream,
+    RasterVertex( myFineVertex: GS_InputVertices(0) ) );
+\end{spark}
+\end{codeblock}
+and we then use projection to fetch the attributes of this \code{FineVertex} as needed:
+\begin{codeblock}
+\begin{spark}
+override @RasterVertex T FineToRaster[type T](
+    @FineVertex T value )
+{
+    return value @ myFineVertex;
+}
+\end{spark}
+\end{codeblock}
+
+\subsection{Instancing}
+
+In order to enable ``instancing'' of the Geometry Shader stage, a shader class simple needs to override the declaration of \code{GS\_InstanceCount}:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{virtual @Constant int GS_InstanceCount = 1;}
+    \desc{Number of instances of the GS stage to run}
+\longdecl{input @GeometryInput uint GS_InstanceID;}
+    \desc{Instance ID for current GS invocation}
+\end{tabularx}
+\end{stdlibx}
+
+Typically, \code{GS\_InstanceID} will be accessed in \code{@RasterVertex} computations, for example to set the render target array index:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{virtual @RasterVertex uint RS_RenderTargetArrayIndex = 0;}
+    \desc{Index in render-target array to use}
+\end{tabularx}
+\end{stdlibx}
+
+\end{document}

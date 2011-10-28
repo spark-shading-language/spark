@@ -1,0 +1,587 @@
+// Copyright 2011 Intel Corporation
+// All Rights Reserved
+//
+// Permission is granted to use, copy, distribute and prepare derivative works of this
+// software for any purpose and without fee, provided, that the above copyright notice
+// and this statement appear in all copies.  Intel makes no representations about the
+// suitability of this software for any purpose.  THIS SOFTWARE IS PROVIDED "AS IS."
+// INTEL SPECIFICALLY DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, AND ALL LIABILITY,
+// INCLUDING CONSEQUENTIAL AND OTHER INDIRECT DAMAGES, FOR THE USE OF THIS SOFTWARE,
+// INCLUDING LIABILITY FOR INFRINGEMENT OF ANY PROPRIETARY RIGHTS, AND INCLUDING THE
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  Intel does not
+// assume any responsibility for any errors which may appear in this software nor any
+// responsibility to update it.
+
+// PNTriangles.spark
+
+// #include "AdaptiveTessellation.hlsl"
+
+shader class Base extends D3D11DrawPass
+{
+//--------------------------------------------------------------------------------------
+// @Uniform Parameters
+//--------------------------------------------------------------------------------------
+
+    input @Uniform float4x4         world;                  // World matrix for object
+    input @Uniform float4x4         viewProjection;         // View * Projection matrix
+    input @Uniform float4x4         worldViewProjection;    // World * View * Projection matrix
+    input @Uniform float4           lightDir;               // Light direction vector
+    input @Uniform float4           eye;                    // Eye
+    input @Uniform float4           viewVector;             // View Vector
+    input @Uniform float4           tessFactors;            // Tessellation factors ( x=Edge, y=Inside, z=MinDistance, w=Range )
+    input @Uniform float4           screenParams;           // Screen resolution ( x=Current width, y=Current height )
+    input @Uniform float4           guiParams1;             // GUI params1 ( x=BackFace Epsilon, y=Silhouette Epsilon, z=Range scale, w=Edge size )
+    input @Uniform float4           guiParams2;             // GUI params2 ( x=Screen resolution scale, y=View Frustum Epsilon )
+    input @Uniform Array[float4,4]  viewFrustumPlanes;      // View frustum planes ( x=left, y=right, z=top, w=bottom )
+
+    // Some global lighting constants
+    @Constant float4 materialDiffuseColor  = float4( 1.0f, 1.0f, 1.0f, 1.0f );
+    @Constant float4 lightDiffuse          = float4( 1.0f, 1.0f, 1.0f, 1.0f );
+    @Constant float4 materialAmbientColor  = float4( 0.2f, 0.2f, 0.2f, 1.0f );
+
+    // Buffers, Textures and Samplers
+    input @Uniform Texture2D[float4] txDiffuse;
+    input @Uniform SamplerState samplePoint;
+    input @Uniform SamplerState sampleLinear;
+
+//--------------------------------------------------------------------------------------
+// @AssembledVertex
+//--------------------------------------------------------------------------------------
+
+    struct PNU
+    {
+        float3 position;
+        float3 normal;
+        float2 texCoord;
+    }
+
+    input @Uniform VertexStream[PNU] vertexStream;
+    input @Uniform DrawSpan drawSpan;
+
+    @AssembledVertex PNU vertex = vertexStream( IA_VertexID );
+    @AssembledVertex float3 P_model = vertex.position;
+    @AssembledVertex float3 N_model = vertex.normal;
+    @AssembledVertex float2 texCoord = vertex.texCoord;
+
+    override IA_DrawSpan = drawSpan;
+
+//--------------------------------------------------------------------------------------
+// @CoarseVertex
+//--------------------------------------------------------------------------------------
+
+    @CoarseVertex float3 P_world = mul( P_model, float3x3(world) );
+    @CoarseVertex float3 N_world = normalize( mul( N_model, float3x3(world) ) );
+
+//--------------------------------------------------------------------------------------
+// @FineVertex
+//--------------------------------------------------------------------------------------
+
+    virtual @FineVertex float3 P_fine = P_world;
+    virtual @FineVertex float3 N_fine = N_world;
+
+    // Perform diffuse lighting on fine vertices
+    // (if tessellation is disabled, this will
+    // fall back to coarse vertices).
+
+    @FineVertex float4 diffuse = float4(
+        materialDiffuseColor.xyz * lightDiffuse.xyz * max( 0, dot( N_fine, lightDir.xyz ) ) + materialAmbientColor.xyz,
+        1.0f );
+
+//--------------------------------------------------------------------------------------
+// @RasterVertex
+//--------------------------------------------------------------------------------------
+
+    override RS_Position = mul( float4( P_fine, 1.0f ), viewProjection );
+
+//--------------------------------------------------------------------------------------
+// @Fragment
+//--------------------------------------------------------------------------------------
+
+    virtual @Fragment float4 color = diffuse;
+
+    output @Pixel float4 target = color;
+}
+
+abstract mixin shader class Texturing extends Base
+{
+    override color = Sample( txDiffuse, sampleLinear, texCoord ) * diffuse;
+}
+
+abstract mixin shader class PNTriangles extends Base, D3D11TriTessellation
+{
+    // Inform the HS of how many coarse vertices we will provide as input,
+    // and how many control points we will compute per-patch.
+    //
+    // NOTE: There is a compiler bug that forces these declarations
+    // to appear first in any shader class that implements tessellation.
+    //
+    override HS_InputCoarseVertexCount = 3;
+    override HS_OutputControlPointCount = 3;
+
+//--------------------------------------------------------------------------------------
+// @Constant
+//--------------------------------------------------------------------------------------
+
+    // Some global epsilons for adaptive tessellation
+    @Constant float maxScreenWidth = 2560.0f;
+    @Constant float maxScreenHeight = 1600.0f;
+
+//--------------------------------------------------------------------------------------
+// @ControlPoint
+//--------------------------------------------------------------------------------------
+
+    implicit @ControlPoint T CoarseToControlPoint[type T]( @CoarseVertex T value )
+    {
+        return value @ HS_InputCoarseVertices( HS_ControlPointID );
+    }
+
+//--------------------------------------------------------------------------------------
+// @PatchCorner
+//--------------------------------------------------------------------------------------
+
+    implicit @PatchCorner T CoarseToPatchCorner[type T]( @CoarseVertex T value )
+    {
+        return value @ HS_InputCoarseVertices( HS_PatchCornerID );
+    }
+
+//--------------------------------------------------------------------------------------
+// @PatchEdge
+//--------------------------------------------------------------------------------------
+
+    override HS_EdgeFactor = tessFactors.x;
+
+    // For this tessellation scheme, the two corners along an edge are those
+    // with indices "edgeID + 2" and "edgeID".
+    //
+    // NOTE: Eventually this code should move into the Spark stdlib.
+    @PatchEdge PatchCorner edgeCorner0 = HS_PatchCorners(HS_PatchEdgeID);
+    @PatchEdge PatchCorner edgeCorner1 = HS_PatchCorners((HS_PatchEdgeID + uint(1)) % uint(3));
+    @PatchEdge PatchCorner edgeCorner2 = HS_PatchCorners((HS_PatchEdgeID + uint(2)) % uint(3));
+
+//--------------------------------------------------------------------------------------
+// @PatchInterior
+//--------------------------------------------------------------------------------------
+
+    // NOTE: The original HLSL code computes the interior factor by averaging
+    // over the edges of the patch. This could be represented in Spark by
+    // having an explicit plubming operator AverageOverEdges().
+    //
+    // Unfortunately, the current definitions in the standard library
+    // are not flexible enough to handle this.
+    //
+    override HS_InsideFactor = (
+        HS_EdgeFactors(0)
+        + HS_EdgeFactors(1)
+        + HS_EdgeFactors(2) ) / 3.0f;
+
+//--------------------------------------------------------------------------------------
+// @Patch
+//--------------------------------------------------------------------------------------
+
+    // Now setup the PNTriangle control points...
+
+    // Assign Positions
+    @OutputPatch float3 b003 = P_world @ HS_InputCoarseVertices(0);
+    @OutputPatch float3 b030 = P_world @ HS_InputCoarseVertices(1);
+    @OutputPatch float3 b300 = P_world @ HS_InputCoarseVertices(2);
+    // And Normals
+    @OutputPatch float3 n002 = N_world @ HS_InputCoarseVertices(0);
+    @OutputPatch float3 n020 = N_world @ HS_InputCoarseVertices(1);
+    @OutputPatch float3 n200 = N_world @ HS_InputCoarseVertices(2);
+
+    // Compute the cubic geometry control points
+    // Edge control points
+    @OutputPatch float3 b210 = ( ( 2.0f * b003 ) + b030 - ( dot( ( b030 - b003 ), n002 ) * n002 ) ) / 3.0f;
+    @OutputPatch float3 b120 = ( ( 2.0f * b030 ) + b003 - ( dot( ( b003 - b030 ), n020 ) * n020 ) ) / 3.0f;
+    @OutputPatch float3 b021 = ( ( 2.0f * b030 ) + b300 - ( dot( ( b300 - b030 ), n020 ) * n020 ) ) / 3.0f;
+    @OutputPatch float3 b012 = ( ( 2.0f * b300 ) + b030 - ( dot( ( b030 - b300 ), n200 ) * n200 ) ) / 3.0f;
+    @OutputPatch float3 b102 = ( ( 2.0f * b300 ) + b003 - ( dot( ( b003 - b300 ), n200 ) * n200 ) ) / 3.0f;
+    @OutputPatch float3 b201 = ( ( 2.0f * b003 ) + b300 - ( dot( ( b300 - b003 ), n002 ) * n002 ) ) / 3.0f;
+
+    // Center control point
+    @OutputPatch float3 f3E = ( b210 + b120 + b021 + b012 + b102 + b201 ) / 6.0f;
+    @OutputPatch float3 f3V = ( b003 + b030 + b300 ) / 3.0f;
+    @OutputPatch float3 b111 = f3E + ( ( f3E - f3V ) / 2.0f );
+
+    // Compute the quadratic normal control points, and rotate into world space
+    @OutputPatch float fV12 = 2.0f * dot( b030 - b003, n002 + n020 ) / dot( b030 - b003, b030 - b003 );
+    @OutputPatch float3 n110 = normalize( n002 + n020 - fV12 * ( b030 - b003 ) );
+    @OutputPatch float fV23 = 2.0f * dot( b300 - b030, n020 + n200 ) / dot( b300 - b030, b300 - b030 );
+    @OutputPatch float3 n011 = normalize( n020 + n200 - fV23 * ( b300 - b030 ) );
+    @OutputPatch float fV31 = 2.0f * dot( b003 - b300, n200 + n002 ) / dot( b003 - b300, b003 - b300 );
+    @OutputPatch float3 n101 = normalize( n200 + n002 - fV31 * ( b003 - b300 ) );
+
+//--------------------------------------------------------------------------------------
+// Tessellator (TS) Stage
+//--------------------------------------------------------------------------------------
+
+    override TS_MaxTessFactor = 9.0f;
+    override TS_Partitioning = FractionalOddPartitioning;
+    override TS_OutputTopology = TriangleCWTopology;
+
+//--------------------------------------------------------------------------------------
+// @FineVertex
+//--------------------------------------------------------------------------------------
+
+    // The barycentric coordinates
+    @FineVertex float fU = DS_DomainLocation.x;
+    @FineVertex float fV = DS_DomainLocation.y;
+    @FineVertex float fW = DS_DomainLocation.z;
+
+    // Precompute squares and squares * 3 
+    @FineVertex float fUU = fU * fU;
+    @FineVertex float fVV = fV * fV;
+    @FineVertex float fWW = fW * fW;
+    @FineVertex float fUU3 = fUU * 3.0f;
+    @FineVertex float fVV3 = fVV * 3.0f;
+    @FineVertex float fWW3 = fWW * 3.0f;
+
+    @ControlPoint float3 P_cp = P_world;
+    @ControlPoint float3 N_cp = N_world;
+
+    // Compute position from cubic control points and barycentric coords
+    override P_fine =
+        (P_cp @ DS_InputControlPoints(0)) * fWW * fW +
+        (P_cp @ DS_InputControlPoints(1)) * fUU * fU +
+        (P_cp @ DS_InputControlPoints(2)) * fVV * fV +
+        b210 * fWW3 * fU +
+        b120 * fW * fUU3 +
+        b201 * fWW3 * fV +
+        b021 * fUU3 * fV +
+        b102 * fW * fVV3 +
+        b012 * fU * fVV3 +
+        b111 * 6.0f * fW * fU * fV;
+    
+    // Compute normal from quadratic control points and barycentric coords
+    override N_fine = normalize(
+        (N_cp @ DS_InputControlPoints(0)) * fWW +
+        (N_cp @ DS_InputControlPoints(1)) * fUU +
+        (N_cp @ DS_InputControlPoints(2)) * fVV +
+        n110 * fW * fU +
+        n011 * fU * fV +
+        n101 * fW * fV);
+
+    // Define an operator to linearly interpolate other values:
+    override @FineVertex T CoarseToFine[type T, implicit Linear[T]]( @CoarseVertex T value )
+    {
+        @ControlPoint T cpValue = CoarseToControlPoint( value );
+        return (cpValue @ DS_InputControlPoints(0)) * fW
+            +  (cpValue @ DS_InputControlPoints(1)) * fU
+            +  (cpValue @ DS_InputControlPoints(2)) * fV;
+    }
+}
+
+abstract mixin shader class ViewFrustumCulling extends Base, PNTriangles
+{
+    //--------------------------------------------------------------------------------------
+    // Returns the distance of a given point from a given plane
+    //--------------------------------------------------------------------------------------
+    float DistanceFromPlane ( 
+                            float3 f3Position,      // World space position of the patch control point
+                            float4 f4PlaneEquation  // Plane equation of a frustum plane
+                            )
+    {
+        float fDistance = dot( float4( f3Position, 1.0f ), f4PlaneEquation );
+    
+        return fDistance;
+    }
+
+    //--------------------------------------------------------------------------------------
+    // Returns view frustum Culling test result (true / false)
+    //--------------------------------------------------------------------------------------
+    bool ViewFrustumCull(
+        float3 f3EdgePosition0,         // World space position of patch control point 0
+        float3 f3EdgePosition1,         // World space position of patch control point 1
+        float3 f3EdgePosition2,         // World space position of patch control point 2
+        Array[float4,4] f4ViewFrustumPlanes,  // 4 plane equations (left, right, top, bottom)
+        float fCullEpsilon              // Epsilon to determine the distance outside the view frustum is still considered inside
+        )
+    {    
+        // Left clip plane
+        float x = ( ( DistanceFromPlane( f3EdgePosition0, f4ViewFrustumPlanes(0)) > -fCullEpsilon ) ? 1.0f : 0.0f ) +
+                        ( ( DistanceFromPlane( f3EdgePosition1, f4ViewFrustumPlanes(0)) > -fCullEpsilon ) ? 1.0f : 0.0f ) +
+                        ( ( DistanceFromPlane( f3EdgePosition2, f4ViewFrustumPlanes(0)) > -fCullEpsilon ) ? 1.0f : 0.0f );
+        // Right clip plane
+        float y = ( ( DistanceFromPlane( f3EdgePosition0, f4ViewFrustumPlanes(1)) > -fCullEpsilon ) ? 1.0f : 0.0f ) +
+                        ( ( DistanceFromPlane( f3EdgePosition1, f4ViewFrustumPlanes(1)) > -fCullEpsilon ) ? 1.0f : 0.0f ) +
+                        ( ( DistanceFromPlane( f3EdgePosition2, f4ViewFrustumPlanes(1)) > -fCullEpsilon ) ? 1.0f : 0.0f );
+        // Top clip plane
+        float z = ( ( DistanceFromPlane( f3EdgePosition0, f4ViewFrustumPlanes(2)) > -fCullEpsilon ) ? 1.0f : 0.0f ) +
+                        ( ( DistanceFromPlane( f3EdgePosition1, f4ViewFrustumPlanes(2)) > -fCullEpsilon ) ? 1.0f : 0.0f ) +
+                        ( ( DistanceFromPlane( f3EdgePosition2, f4ViewFrustumPlanes(2)) > -fCullEpsilon ) ? 1.0f : 0.0f );
+        // Bottom clip plane
+        float w = ( ( DistanceFromPlane( f3EdgePosition0, f4ViewFrustumPlanes(3)) > -fCullEpsilon ) ? 1.0f : 0.0f ) +
+                        ( ( DistanceFromPlane( f3EdgePosition1, f4ViewFrustumPlanes(3)) > -fCullEpsilon ) ? 1.0f : 0.0f ) +
+                        ( ( DistanceFromPlane( f3EdgePosition2, f4ViewFrustumPlanes(3)) > -fCullEpsilon ) ? 1.0f : 0.0f );
+        
+        // Triangle has to pass all 4 plane tests to be visible
+        return !all( float4(x, y, z, w) );
+    }
+
+
+    // Perform view frustum culling test
+    override HS_CullPatch |= ViewFrustumCull(
+        P_world @ HS_InputCoarseVertices(0),
+        P_world @ HS_InputCoarseVertices(1),
+        P_world @ HS_InputCoarseVertices(2),
+        viewFrustumPlanes,
+        guiParams2.y );
+}
+
+abstract mixin shader class EdgeDotProduct extends Base, PNTriangles
+{
+    //--------------------------------------------------------------------------------------
+    // Returns the dot product between the viewing vector and the patch edge
+    //--------------------------------------------------------------------------------------
+    float GetEdgeDotProduct ( 
+                            float3 f3EdgeNormal0,   // Normalized normal of the first control point of the given patch edge 
+                            float3 f3EdgeNormal1,   // Normalized normal of the second control point of the given patch edge 
+                            float3 f3ViewVector     // Normalized viewing vector
+                            )
+    {
+        float3 f3EdgeNormal = normalize( ( f3EdgeNormal0 + f3EdgeNormal1 ) * 0.5f );
+    
+        float fEdgeDotProduct = dot( f3EdgeNormal, f3ViewVector );
+
+        return fEdgeDotProduct;
+    }
+
+    @PatchCorner float3 N_corner = N_world;
+
+    @PatchEdge float edgeDot = GetEdgeDotProduct(
+        N_corner @ edgeCorner0,
+        N_corner @ edgeCorner2,
+        viewVector.xyz );
+}
+
+abstract mixin shader class BackFaceCulling extends Base, PNTriangles, EdgeDotProduct
+{
+    //--------------------------------------------------------------------------------------
+    // Returns back face culling test result (true / false)
+    //--------------------------------------------------------------------------------------
+    bool BackFaceCull    ( 
+                        float fEdgeDotProduct0, // Dot product of edge 0 normal with view vector
+                        float fEdgeDotProduct1, // Dot product of edge 1 normal with view vector
+                        float fEdgeDotProduct2, // Dot product of edge 2 normal with view vector
+                        float fBackFaceEpsilon  // Epsilon to determine cut off value for what is considered back facing
+                        )
+    {
+        float x = ( fEdgeDotProduct0 > -fBackFaceEpsilon ) ? ( 0.0f ) : ( 1.0f );
+        float y = ( fEdgeDotProduct1 > -fBackFaceEpsilon ) ? ( 0.0f ) : ( 1.0f );
+        float z = ( fEdgeDotProduct2 > -fBackFaceEpsilon ) ? ( 0.0f ) : ( 1.0f );
+
+        return all( float3(x, y, z) );
+    }
+
+    // If all 3 fail the test then back face cull
+    override HS_CullPatch |= BackFaceCull(
+        edgeDot @ HS_PatchEdges(0),
+        edgeDot @ HS_PatchEdges(1),
+        edgeDot @ HS_PatchEdges(2),
+        guiParams1.x );
+}
+
+/*
+NOTE: Ideally, we should be able to skip the rest of the Hull Shader body based on the
+results of the view-frustum or back-face culling step.
+The Spark language needs a better mechanism to expose such early-exit opportunities,
+perhaps in the form of conceptual programmable culling steps before certain
+shader stages (HS, PS).
+
+Culling in the HS stage is achieved by setting all the edge tessellation rates to 0.0f.
+*/
+
+abstract mixin shader class AdaptiveTessellation extends Base, PNTriangles
+{
+//--------------------------------------------------------------------------------------
+// @PatchEdge
+//--------------------------------------------------------------------------------------
+
+    virtual @PatchEdge float adaptiveScaleFactor = 1.0f;
+    override HS_EdgeFactor = lerp( 1.0f, tessFactors.x, adaptiveScaleFactor );
+}
+
+abstract mixin shader class ScreenSpaceAdaptiveTessellation extends AdaptiveTessellation
+{
+//--------------------------------------------------------------------------------------
+// @PatchCorner
+//--------------------------------------------------------------------------------------
+
+    //--------------------------------------------------------------------------------------
+    // Returns the screen space position from the given world space patch control point
+    //--------------------------------------------------------------------------------------
+    float2 GetScreenSpacePosition   ( 
+                                    float3 f3Position,              // World space position of patch control point
+                                    float4x4 f4x4ViewProjection,    // View x Projection matrix
+                                    float fScreenWidth,             // Screen width
+                                    float fScreenHeight             // Screen height
+                                    )
+    {
+        float4 f4ProjectedPosition = mul( float4( f3Position, 1.0f ), f4x4ViewProjection );
+    
+        float2 f2ScreenPosition = f4ProjectedPosition.xy / f4ProjectedPosition.w;
+    
+        f2ScreenPosition = ( f2ScreenPosition + 1.0f ) * 0.5f * float2( fScreenWidth, -fScreenHeight );
+
+        return f2ScreenPosition;
+    }
+
+    @PatchCorner float2 screenSpacePosition = GetScreenSpacePosition(
+        P_world @ HS_InputCoarseVertices(HS_PatchCornerID),
+        viewProjection,
+        screenParams.x,
+        screenParams.y);
+
+//--------------------------------------------------------------------------------------
+// @PatchEdge
+//--------------------------------------------------------------------------------------
+
+    //--------------------------------------------------------------------------------------
+    // Returns the screen space adaptive tessellation scale factor (0.0f -> 1.0f)
+    //--------------------------------------------------------------------------------------
+    float GetScreenSpaceAdaptiveScaleFactor (
+                                            float2 f2EdgeScreenPosition0,   // Screen coordinate of the first patch edge control point
+                                            float2 f2EdgeScreenPosition1,   // Screen coordinate of the second patch edge control point    
+                                            float fMaxEdgeTessFactor,       // Maximum edge tessellation factor                            
+                                            float fTargetEdgePrimitiveSize  // Desired primitive edge size in pixels
+                                            )
+    {
+        float fEdgeScreenLength = distance( f2EdgeScreenPosition0, f2EdgeScreenPosition1 );
+
+        float fTargetTessFactor = fEdgeScreenLength / fTargetEdgePrimitiveSize;
+
+        fTargetTessFactor = fTargetTessFactor / fMaxEdgeTessFactor;
+    
+        float fScale = saturate( fTargetTessFactor );
+    
+        return fScale;
+    }
+
+
+    @PatchEdge float screenSpaceAdaptiveScaleFactor =
+        GetScreenSpaceAdaptiveScaleFactor(
+            screenSpacePosition @ edgeCorner0,
+            screenSpacePosition @ edgeCorner2,
+            tessFactors.x,
+            guiParams1.w );
+
+    override adaptiveScaleFactor *= screenSpaceAdaptiveScaleFactor;
+}
+
+abstract mixin shader class DistanceAdaptiveTessellation extends AdaptiveTessellation
+{
+    //--------------------------------------------------------------------------------------
+    // Returns a distance adaptive tessellation scale factor (0.0f -> 1.0f) 
+    //--------------------------------------------------------------------------------------
+    float GetDistanceAdaptiveScaleFactor(    
+                                        float3 f3Eye,           // Position of the camera/eye
+                                        float3 f3EdgePosition0, // Position of the first control point of the given patch edge
+                                        float3 f3EdgePosition1, // Position of the second control point of the given patch edge
+                                        float fMinDistance,     // Minimum distance that maximum tessellation factors should be applied at
+                                        float fRange            // Range beyond the minimum distance where tessellation will scale down to the minimum scaling factor    
+                                        )
+    {
+        float3 f3MidPoint = ( f3EdgePosition0 + f3EdgePosition1 ) * 0.5f;
+
+        float fDistance = distance( f3MidPoint, f3Eye ) - fMinDistance;
+        
+        float fScale = 1.0f - saturate( fDistance / fRange );
+
+        return fScale;
+    }
+
+    @PatchCorner float3 P_corner = P_world;
+
+    // Perform distance adaptive tessellation per edge
+    @PatchEdge float distanceAdaptiveScaleFactor =
+        GetDistanceAdaptiveScaleFactor(
+            eye.xyz,
+            P_corner @ edgeCorner0,
+            P_corner @ edgeCorner2,
+            tessFactors.z,
+            tessFactors.w * guiParams1.z );
+
+    override adaptiveScaleFactor *= distanceAdaptiveScaleFactor;
+}
+
+abstract mixin shader class ScreenResolutionAdaptiveTessellation extends AdaptiveTessellation
+{
+    //--------------------------------------------------------------------------------------
+    // Returns the screen resolution adaptive tessellation scale factor (0.0f -> 1.0f)
+    //--------------------------------------------------------------------------------------
+    float GetScreenResolutionAdaptiveScaleFactor( 
+                                                float fCurrentWidth,    // Current render window width 
+                                                float fCurrentHeight,   // Current render window height 
+                                                float fMaxWidth,        // Width considered to be max
+                                                float fMaxHeight        // Height considered to be max
+                                                )
+    {
+        float fMaxArea = fMaxWidth * fMaxHeight;
+    
+        float fCurrentArea = fCurrentWidth * fCurrentHeight;
+
+        float fScale = saturate( fCurrentArea / fMaxArea );
+
+        return fScale;
+    }
+
+    // Use screen resolution as a global scaling factor
+    //
+    // NOTE: This computation could be performed at @Uniform rate, provided
+    // all the required operations get implemented in the LLVM back-end.
+    @PatchEdge float screenResolutionAdaptiveScaleFactor =
+        GetScreenResolutionAdaptiveScaleFactor(
+            screenParams.x, screenParams.y,
+            maxScreenWidth * guiParams2.x,
+            maxScreenHeight * guiParams2.x );
+
+    override adaptiveScaleFactor *= screenResolutionAdaptiveScaleFactor;
+}
+
+abstract mixin shader class OrientationAdaptiveTessellation extends AdaptiveTessellation, EdgeDotProduct
+{
+    //--------------------------------------------------------------------------------------
+    // Returns the orientation adaptive tessellation factor (0.0f -> 1.0f)
+    //--------------------------------------------------------------------------------------
+    float GetOrientationAdaptiveScaleFactor ( 
+                                            float fEdgeDotProduct,      // Dot product of edge normal with view vector
+                                            float fSilhouetteEpsilon    // Epsilon to determine the range of values considered to be silhoutte
+                                            )
+    {
+        float fScale = 1.0f - abs( fEdgeDotProduct );
+        
+        fScale = saturate( ( fScale - fSilhouetteEpsilon ) / ( 1.0f - fSilhouetteEpsilon ) );
+
+        return fScale;
+    }
+
+    @PatchEdge float orientationAdaptiveScaleFactor =
+        GetOrientationAdaptiveScaleFactor( edgeDot, guiParams1.y );
+
+    override adaptiveScaleFactor *= orientationAdaptiveScaleFactor;
+
+/*
+NOTE: The orientation-adaptive path has a strange dependency in HLSL, where if it is used togehter
+with one of the other factors, it averages with them, but otherwise it overrides the existing
+tessellation factor. It is unclear how to model this interaction cleanly.
+    #if defined( USE_SCREEN_SPACE_ADAPTIVE_TESSELLATION ) || defined( USE_DISTANCE_ADAPTIVE_TESSELLATION )
+
+        O.fTessFactor[0] = ( O.fTessFactor[0] + fTessFactor0 ) / 2.0f;    
+        O.fTessFactor[1] = ( O.fTessFactor[1] + fTessFactor1 ) / 2.0f;    
+        O.fTessFactor[2] = ( O.fTessFactor[2] + fTessFactor2 ) / 2.0f;    
+
+    #else
+            
+        O.fTessFactor[0] = fTessFactor0;    
+        O.fTessFactor[1] = fTessFactor1;    
+        O.fTessFactor[2] = fTessFactor2;    
+
+    #endif
+*/
+}
+
+shader class TestBF extends AdaptiveTessellation, Texturing, BackFaceCulling
+{}
+
+shader class TestVF extends AdaptiveTessellation, Texturing, ViewFrustumCulling
+{}

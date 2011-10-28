@@ -1,0 +1,1452 @@
+// Copyright 2011 Intel Corporation
+// All Rights Reserved
+//
+// Permission is granted to use, copy, distribute and prepare derivative works of this
+// software for any purpose and without fee, provided, that the above copyright notice
+// and this statement appear in all copies.  Intel makes no representations about the
+// suitability of this software for any purpose.  THIS SOFTWARE IS PROVIDED "AS IS."
+// INTEL SPECIFICALLY DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, AND ALL LIABILITY,
+// INCLUDING CONSEQUENTIAL AND OTHER INDIRECT DAMAGES, FOR THE USE OF THIS SOFTWARE,
+// INCLUDING LIABILITY FOR INFRINGEMENT OF ANY PROPRIETARY RIGHTS, AND INCLUDING THE
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  Intel does not
+// assume any responsibility for any errors which may appear in this software nor any
+// responsibility to update it.
+
+// stdlib.spark
+
+abstract shader class D3D11DrawPass
+{
+	[[Builtin("hlsl", "ubyte")]]
+	[[Builtin("c++", "char")]]
+	[[Builtin("llvm", "u8")]]
+	type ubyte;
+
+	[[Builtin("hlsl", "uint4")]]
+	[[Builtin("c++", "spark::ubyte4")]]
+	[[Builtin("llvm", "u8^4")]]
+	type ubyte4;
+
+	[[Builtin("hlsl", "unorm")]]
+	[[Builtin("c++", "char")]]
+	[[Builtin("llvm", "u8")]]
+	type unorm;
+
+	[[Builtin("hlsl", "float4")]]
+	[[Builtin("c++", "spark::unorm4")]]
+	[[Builtin("llvm", "u8^4")]]
+	type unorm4;
+
+	[[Builtin("hlsl", "ushort")]]
+	[[Builtin("c++", "short")]]
+	[[Builtin("llvm", "u16")]]
+	type ushort;
+
+	[[Builtin("hlsl", "uint")]]
+	[[Builtin("c++", "UINT")]]
+	[[Builtin("llvm", "u32")]]
+	type uint;
+
+	[[Builtin("hlsl", "uint4")]]
+	[[Builtin("c++", "spark::uint4")]]
+	[[Builtin("llvm", "u32^4")]]
+	type uint4;
+
+	[[Builtin("hlsl", "float2")]]
+	[[Builtin("c++", "spark::float2")]]
+	[[Builtin("llvm", "f32^2")]]
+	type float2;
+
+	[[Builtin("hlsl", "float3")]]
+	[[Builtin("c++", "spark::float3")]]
+	[[Builtin("llvm", "f32^3")]]
+	type float3;
+
+	[[Builtin("hlsl", "float4")]]
+	[[Builtin("c++", "spark::float4")]]
+	[[Builtin("llvm", "f32^4")]]
+	type float4;
+
+	[[Builtin("hlsl", "float3x3")]]
+	[[Builtin("c++", "spark::float3x3")]]
+	[[Builtin("llvm", "f32^3^3")]]
+	type float3x3;
+
+	[[Builtin("hlsl", "float4x3")]]
+	[[Builtin("c++", "spark::float4x3")]]
+	[[Builtin("llvm", "f32^3^4")]]
+	type float4x3;
+
+	[[Builtin("hlsl", "float4x4")]]
+	[[Builtin("c++", "spark::float4x4")]]
+	[[Builtin("llvm", "f32^4^4")]]
+	type float4x4;
+
+	[[Builtin("hlsl", "Texture2D<{0}>")]]
+	[[Builtin("c++", "ID3D11ShaderResourceView*")]]
+	[[Builtin("llvm", "v*")]]
+	type Texture2D[type T];
+
+	[[Builtin("hlsl", "TextureCube<{0}>")]]
+	[[Builtin("c++", "ID3D11ShaderResourceView*")]]
+	[[Builtin("llvm", "v*")]]
+	type TextureCube[type T];
+
+	[[Builtin("hlsl", "Buffer<{0}>")]]
+	[[Builtin("c++", "ID3D11ShaderResourceView*")]]
+	[[Builtin("llvm", "v*")]]
+	type Buffer[type T];
+
+	[[Builtin("c++", "ID3D11Buffer*")]]
+	[[Builtin("llvm", "v*")]]
+	type VertexBuffer;
+
+	[[Builtin("c++", "spark::d3d11::VertexStream")]]
+	[[Builtin("llvm", "spark::d3d11::VertexStream")]]
+	type VertexStream[type T];
+
+	[[Builtin("c++", "ID3D11Buffer*")]]
+	[[Builtin("llvm", "v*")]]
+	type IndexBuffer;
+
+	[[Builtin("hlsl", "__Array")]]
+	[[Builtin("c++", "__Array")]]
+	[[Builtin("llvm", "__Array")]]
+	type Array[type T, @Constant int Length];
+
+	[[Builtin("c++", "ID3D11DepthStencilView*")]]
+	[[Builtin("llvm", "v*")]]
+	type DepthStencilView;
+
+	[[Builtin("hlsl", "TriangleStream<{0}>")]]
+	type Stream[type T];
+
+	[[Builtin("hlsl", "({0}).Append({1})")]]
+	void Append[type T]( Stream[T] stream, T value );
+
+	[[Builtin("hlsl", "({0}).RestartStrip()")]]
+	void RestartStrip[type T]( Stream[T] stream  );
+
+	input @Uniform DepthStencilView depthStencilView;
+
+	[[Builtin("hlsl", "__GetElem")]]
+	[[Builtin("c++", "({0})[{1}]")]]
+	T operator()[type T, @Constant int Length]( Array[T, Length] array, int index );
+
+	[[Builtin("hlsl", "__GetElem")]]
+	[[Builtin("c++", "({0})[{1}]")]]
+	T operator()[type T, @Constant int Length]( Array[T, Length] array, uint index );
+
+	[[Builtin("hlsl", "{{ {0}, {1} }}")]]
+	[[Builtin("c++", "{{ {0}, {1} }}")]]
+	Array[T,2] Array[type T]( T e0, T e1 );
+
+	[[Builtin("hlsl", "{{ {0}, {1}, {2} }}")]]
+	[[Builtin("c++", "{{ {0}, {1}, {2} }}")]]
+	Array[T,3] Array[type T]( T e0, T e1, T e2 );
+
+	[[Builtin("hlsl", "{{ {0}, {1}, {2}, {3} }}")]]
+	[[Builtin("c++", "{{ {0}, {1}, {2}, {3} }}")]]
+	Array[T,4] Array[type T]( T e0, T e1, T e2, T e3 );
+
+	[[Builtin("hlsl", "{{ {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}, {13}, {14}, {15} }}")]]
+	[[Builtin("c++", "{{ {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}, {13}, {14}, {15} }}")]]
+	Array[T,16] Array[type T]( T e0, T e1, T e2, T e3,
+	                      T e4, T e5, T e6, T e7,
+	                      T e8, T e9, T e10, T e11,
+	                      T e12, T e13, T e14, T e15 );
+
+	[[Builtin("hlsl", "{{ {0}, {0}, {0}, {0} }}")]]
+	[[Builtin("c++", "{{ {0}, {0}, {0}, {0} }}")]]
+	Array[T,Length] MakeArray[type T, @Constant int Length]( T value );
+
+
+
+	[[Builtin("hlsl", "InputPatch<{0}, {1}>")]]
+	[[Builtin("c++", "__Array")]]
+	[[Builtin("llvm", "__Array")]]
+	type InputCoarseVertexArray[type T, @Constant int Length];
+
+	[[Builtin("hlsl", "({0})[{1}]")]]
+	[[Builtin("c++", "({0})[{1}]")]]
+	T operator()[type T, @Constant int Length]( InputCoarseVertexArray[T, Length] array, int index );
+
+	[[Builtin("hlsl", "({0})[{1}]")]]
+	[[Builtin("c++", "({0})[{1}]")]]
+	T operator()[type T, @Constant int Length]( InputCoarseVertexArray[T, Length] array, uint index );
+
+	[[Builtin("hlsl", "OutputPatch<{0}, {1}>")]]
+	[[Builtin("c++", "__Array")]]
+	[[Builtin("llvm", "__Array")]]
+	type OutputControlPointArray[type T, @Constant int Length];
+
+	[[Builtin("hlsl", "({0})[{1}]")]]
+	[[Builtin("c++", "({0})[{1}]")]]
+	T operator()[type T, @Constant int Length]( OutputControlPointArray[T, Length] array, int index );
+
+	[[Builtin("hlsl", "({0})[{1}]")]]
+	[[Builtin("c++", "({0})[{1}]")]]
+	T operator()[type T, @Constant int Length]( OutputControlPointArray[T, Length] array, uint index );
+
+	[[Builtin("c++", "D3D11_PRIMITIVE_TOPOLOGY")]]
+	[[Builtin("llvm", "u32")]]
+	type D3D11_PRIMITIVE_TOPOLOGY;
+
+	[[Builtin("c++", "D3D11_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST")]]
+	@Constant D3D11_PRIMITIVE_TOPOLOGY D3D11_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
+
+	[[Builtin("c++", "D3D11_PRIMITIVE_TOPOLOGY_16_CONTROL_POINT_PATCHLIST")]]
+	@Constant D3D11_PRIMITIVE_TOPOLOGY D3D11_PRIMITIVE_TOPOLOGY_16_CONTROL_POINT_PATCHLIST;
+
+	[[Builtin("c++", "D3D11_PRIMITIVE_TOPOLOGY_32_CONTROL_POINT_PATCHLIST")]]
+	@Constant D3D11_PRIMITIVE_TOPOLOGY D3D11_PRIMITIVE_TOPOLOGY_32_CONTROL_POINT_PATCHLIST;
+
+	[[Builtin("c++", "D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST")]]
+	@Constant D3D11_PRIMITIVE_TOPOLOGY D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+	[[Builtin("c++", "spark::d3d11::IndexStream")]]
+	[[Builtin("llvm", "spark::d3d11::IndexStream")]]
+	type IndexStream;
+
+	[[Builtin("c++", "spark::d3d11::PrimitiveSpan")]]
+	[[Builtin("llvm", "spark::d3d11::PrimitiveSpan")]]
+	type PrimitiveSpan;
+
+	[[Builtin("c++", "({0}).primitiveTopology")]]
+	[[Builtin("llvm", "1")]]
+	D3D11_PRIMITIVE_TOPOLOGY operator(Topology)( PrimitiveSpan span );
+
+	[[Builtin("c++", "spark::d3d11::DrawSpan")]]
+	[[Builtin("llvm", "spark::d3d11::DrawSpan")]]
+	type DrawSpan;
+
+	[[Builtin("c++", "spark::d3d11::Draw({0}, {1})")]]
+	[[Builtin("llvm", "spark::d3d11::Draw")]]
+	DrawSpan Draw( uint vertexCount, uint startVertexLocation );
+
+	[[Builtin("c++", "spark::d3d11::DrawSpan({0}, {1})")]]
+	[[Builtin("llvm", "spark::d3d11::DrawSpan")]]
+	DrawSpan Draw( IndexStream indices, PrimitiveSpan span );
+
+	element Constant;
+	element Uniform;
+
+	concrete element AssembledVertex;
+	input @AssembledVertex uint IA_VertexID;
+	input @AssembledVertex uint IA_InstanceID;
+
+	concrete element CoarseVertex;
+	input @CoarseVertex uint VS_VertexID;
+	input @CoarseVertex uint VS_InstanceID;
+	input @CoarseVertex AssembledVertex __ia2vs;
+
+	[[Builtin("hlsl", "uint")]]
+	[[Builtin("c++", "UINT")]]
+	[[Builtin("llvm", "u32")]]
+	type TessellationDomain;
+	input @Constant TessellationDomain TriangleDomain;
+	input @Constant TessellationDomain QuadDomain;
+
+	[[Builtin("hlsl", "uint")]]
+	[[Builtin("c++", "UINT")]]
+	[[Builtin("llvm", "u32")]]
+	type TessellationPartitioning;
+	input @Constant TessellationPartitioning FractionalOddPartitioning;
+	input @Constant TessellationPartitioning IntegerPartitioning;
+
+	[[Builtin("hlsl", "uint")]]
+	[[Builtin("c++", "UINT")]]
+	[[Builtin("llvm", "u32")]]
+	type TessellationOutputTopology;
+	input @Constant TessellationOutputTopology TriangleCWTopology;
+
+	element FineVertex;
+
+	element RasterVertex;
+	abstract @RasterVertex float4 RS_Position;
+	output @RasterVertex float4 __RS_Position = RS_Position;
+
+	element Fragment;
+
+	element Pixel;
+	input @Pixel Fragment __ps2om;
+
+	[[Builtin("c++", "({0}).buffer")]]
+	[[Builtin("llvm", "0")]]
+	VertexBuffer operator(buffer)[type T]( VertexStream[T] stream );
+
+	[[Builtin("c++", "({0}).offset")]]
+	[[Builtin("llvm", "1")]]
+	uint operator(offset)[type T]( VertexStream[T] stream );
+
+	[[Builtin("c++", "({0}).stride")]]
+	[[Builtin("llvm", "2")]]
+	uint operator(stride)[type T]( VertexStream[T] stream );
+
+	[[Builtin("hlsl", "__VertexFetch")]]
+	@AssembledVertex T __VertexFetch[type T]( @Uniform VertexBuffer buffer, @Uniform uint offset, @Uniform uint stride, @AssembledVertex uint index );
+
+    //
+    // Types and functions related to fixed-function state
+    //
+
+//--------------------------------------------------------------------------------------
+// enum D3D11_FILTER
+//--------------------------------------------------------------------------------------
+
+    [[Builtin("c++", "D3D11_FILTER")]]
+    [[Builtin("llvm", "u32")]]
+    type D3D11_FILTER ;
+
+    [[Builtin("c++", "D3D11_FILTER_MIN_MAG_MIP_POINT")]]
+    [[Builtin("llvm", "0x0")]]
+    @Constant D3D11_FILTER D3D11_FILTER_MIN_MAG_MIP_POINT;
+
+    [[Builtin("c++", "D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR")]]
+    [[Builtin("llvm", "0x1")]]
+    @Constant D3D11_FILTER D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+
+    [[Builtin("c++", "D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT")]]
+    [[Builtin("llvm", "0x4")]]
+    @Constant D3D11_FILTER D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
+
+    [[Builtin("c++", "D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR")]]
+    [[Builtin("llvm", "0x5")]]
+    @Constant D3D11_FILTER D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR;
+
+    [[Builtin("c++", "D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT")]]
+    [[Builtin("llvm", "0x10")]]
+    @Constant D3D11_FILTER D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT;
+
+    [[Builtin("c++", "D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR")]]
+    [[Builtin("llvm", "0x11")]]
+    @Constant D3D11_FILTER D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
+
+    [[Builtin("c++", "D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT")]]
+    [[Builtin("llvm", "0x14")]]
+    @Constant D3D11_FILTER D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+
+    [[Builtin("c++", "D3D11_FILTER_MIN_MAG_MIP_LINEAR")]]
+    [[Builtin("llvm", "0x15")]]
+    @Constant D3D11_FILTER D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+
+    [[Builtin("c++", "D3D11_FILTER_ANISOTROPIC")]]
+    [[Builtin("llvm", "0x55")]]
+    @Constant D3D11_FILTER D3D11_FILTER_ANISOTROPIC;
+
+    [[Builtin("c++", "D3D11_FILTER_COMPARISON_MIN_MAG_MIP_POINT")]]
+    [[Builtin("llvm", "0x80")]]
+    @Constant D3D11_FILTER D3D11_FILTER_COMPARISON_MIN_MAG_MIP_POINT;
+
+    [[Builtin("c++", "D3D11_FILTER_COMPARISON_MIN_MAG_POINT_MIP_LINEAR")]]
+    [[Builtin("llvm", "0x81")]]
+    @Constant D3D11_FILTER D3D11_FILTER_COMPARISON_MIN_MAG_POINT_MIP_LINEAR;
+
+    [[Builtin("c++", "D3D11_FILTER_COMPARISON_MIN_POINT_MAG_LINEAR_MIP_POINT")]]
+    [[Builtin("llvm", "0x84")]]
+    @Constant D3D11_FILTER D3D11_FILTER_COMPARISON_MIN_POINT_MAG_LINEAR_MIP_POINT;
+
+    [[Builtin("c++", "D3D11_FILTER_COMPARISON_MIN_POINT_MAG_MIP_LINEAR")]]
+    [[Builtin("llvm", "0x85")]]
+    @Constant D3D11_FILTER D3D11_FILTER_COMPARISON_MIN_POINT_MAG_MIP_LINEAR;
+
+    [[Builtin("c++", "D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_MIP_POINT")]]
+    [[Builtin("llvm", "0x90")]]
+    @Constant D3D11_FILTER D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_MIP_POINT;
+
+    [[Builtin("c++", "D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_POINT_MIP_LINEAR")]]
+    [[Builtin("llvm", "0x91")]]
+    @Constant D3D11_FILTER D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
+
+    [[Builtin("c++", "D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT")]]
+    [[Builtin("llvm", "0x94")]]
+    @Constant D3D11_FILTER D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
+
+    [[Builtin("c++", "D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR")]]
+    [[Builtin("llvm", "0x95")]]
+    @Constant D3D11_FILTER D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+
+    [[Builtin("c++", "D3D11_FILTER_COMPARISON_ANISOTROPIC")]]
+    [[Builtin("llvm", "0xd5")]]
+    @Constant D3D11_FILTER D3D11_FILTER_COMPARISON_ANISOTROPIC;
+
+    [[Builtin("c++", "D3D11_FILTER_TEXT_1BIT")]]
+    [[Builtin("llvm", "0x80000000")]]
+    @Constant D3D11_FILTER D3D11_FILTER_TEXT_1BIT;
+
+//--------------------------------------------------------------------------------------
+// enum D3D11_TEXTURE_ADDRESS_MODE
+//--------------------------------------------------------------------------------------
+
+    [[Builtin("c++", "D3D11_TEXTURE_ADDRESS_MODE")]]
+    [[Builtin("llvm", "u32")]]
+    type D3D11_TEXTURE_ADDRESS_MODE;
+
+    [[Builtin("c++", "D3D11_TEXTURE_ADDRESS_WRAP")]]
+    [[Builtin("llvm", "0x1")]]
+    @Constant D3D11_TEXTURE_ADDRESS_MODE D3D11_TEXTURE_ADDRESS_WRAP;
+
+    [[Builtin("c++", "D3D11_TEXTURE_ADDRESS_MIRROR")]]
+    [[Builtin("llvm", "0x2")]]
+    @Constant D3D11_TEXTURE_ADDRESS_MODE D3D11_TEXTURE_ADDRESS_MIRROR;
+
+    [[Builtin("c++", "D3D11_TEXTURE_ADDRESS_CLAMP")]]
+    [[Builtin("llvm", "0x3")]]
+    @Constant D3D11_TEXTURE_ADDRESS_MODE D3D11_TEXTURE_ADDRESS_CLAMP;
+
+    [[Builtin("c++", "D3D11_TEXTURE_ADDRESS_BORDER")]]
+    [[Builtin("llvm", "0x4")]]
+    @Constant D3D11_TEXTURE_ADDRESS_MODE D3D11_TEXTURE_ADDRESS_BORDER;
+
+    [[Builtin("c++", "D3D11_TEXTURE_ADDRESS_MIRROR_ONCE")]]
+    [[Builtin("llvm", "0x5")]]
+    @Constant D3D11_TEXTURE_ADDRESS_MODE D3D11_TEXTURE_ADDRESS_MIRROR_ONCE;
+
+//--------------------------------------------------------------------------------------
+// enum D3D11_COMPARISON_FUNC
+//--------------------------------------------------------------------------------------
+
+    [[Builtin("c++", "D3D11_COMPARISON_FUNC")]]
+    [[Builtin("llvm", "u32")]]
+    type D3D11_COMPARISON_FUNC;
+
+    [[Builtin("c++", "D3D11_COMPARISON_NEVER")]]
+    [[Builtin("llvm", "0x1")]]
+    @Constant D3D11_COMPARISON_FUNC D3D11_COMPARISON_NEVER;
+
+    [[Builtin("c++", "D3D11_COMPARISON_LESS")]]
+    [[Builtin("llvm", "0x2")]]
+    @Constant D3D11_COMPARISON_FUNC D3D11_COMPARISON_LESS;
+
+    [[Builtin("c++", "D3D11_COMPARISON_EQUAL")]]
+    [[Builtin("llvm", "0x3")]]
+    @Constant D3D11_COMPARISON_FUNC D3D11_COMPARISON_EQUAL;
+
+    [[Builtin("c++", "D3D11_COMPARISON_LESS_EQUAL")]]
+    [[Builtin("llvm", "0x4")]]
+    @Constant D3D11_COMPARISON_FUNC D3D11_COMPARISON_LESS_EQUAL;
+
+    [[Builtin("c++", "D3D11_COMPARISON_GREATER")]]
+    [[Builtin("llvm", "0x5")]]
+    @Constant D3D11_COMPARISON_FUNC D3D11_COMPARISON_GREATER;
+
+    [[Builtin("c++", "D3D11_COMPARISON_NOT_EQUAL")]]
+    [[Builtin("llvm", "0x6")]]
+    @Constant D3D11_COMPARISON_FUNC D3D11_COMPARISON_NOT_EQUAL;
+
+    [[Builtin("c++", "D3D11_COMPARISON_GREATER_EQUAL")]]
+    [[Builtin("llvm", "0x7")]]
+    @Constant D3D11_COMPARISON_FUNC D3D11_COMPARISON_GREATER_EQUAL;
+
+    [[Builtin("c++", "D3D11_COMPARISON_ALWAYS")]]
+    [[Builtin("llvm", "0x8")]]
+    @Constant D3D11_COMPARISON_FUNC D3D11_COMPARISON_ALWAYS;
+
+//    [[Builtin("c++", "NAME")]]
+//    [[Builtin("llvm", "VALUE")]]
+//    @Constant TYPE NAME;
+
+//--------------------------------------------------------------------------------------
+// type SamplerState
+//--------------------------------------------------------------------------------------
+
+    [[Builtin("hlsl", "SamplerState")]]
+    [[Builtin("c++", "ID3D11SamplerState*")]]
+    [[Builtin("llvm", "v*")]]
+    type SamplerState;
+
+    [[Builtin("c++", "spark::d3d11::CreateSamplerState(device, {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})")]]
+    [[Builtin("llvm", "FooBarBaz!")]]
+    @Constant SamplerState SamplerState(
+        @Constant D3D11_FILTER                  filter,
+        @Constant D3D11_TEXTURE_ADDRESS_MODE    addressU,
+        @Constant D3D11_TEXTURE_ADDRESS_MODE    addressV,
+        @Constant D3D11_TEXTURE_ADDRESS_MODE    addressW,
+        @Constant float                         mipLODBias,
+        @Constant uint                          maxAnisotropy,
+        @Constant D3D11_COMPARISON_FUNC         comparisonFunc,
+        @Constant float4                        borderColor,
+        @Constant float                         minLOD,
+        @Constant float                         maxLOD );
+
+    // helper function for a common case (all the
+    // addressing modes are the same).
+    @Constant SamplerState SamplerState(
+        @Constant D3D11_FILTER filter,
+        @Constant D3D11_TEXTURE_ADDRESS_MODE address )
+    {
+        return SamplerState(
+            filter: filter,
+            addressU: address,
+            addressV: address,
+            addressW: address,
+            mipLODBias: 0.0f,
+            maxAnisotropy: uint(16),
+            comparisonFunc: D3D11_COMPARISON_NEVER,
+            borderColor: float4(0.0f, 0.0f, 0.0f, 0.0f),
+            minLOD: -3.402823466e38f, // - FLT_MAX
+            maxLOD: 3.402823466e38f); //   FLT_MAX
+    }
+
+//--------------------------------------------------------------------------------------
+// enum D3D11_FILL_MODE
+//--------------------------------------------------------------------------------------
+
+    [[Builtin("c++", "D3D11_FILL_MODE")]]
+    [[Builtin("llvm", "u32")]]
+    type D3D11_FILL_MODE;
+
+
+    [[Builtin("c++", "D3D11_FILL_WIREFRAME")]]
+    [[Builtin("llvm", "0x2")]]
+    @Constant D3D11_FILL_MODE D3D11_FILL_WIREFRAME;
+
+    [[Builtin("c++", "D3D11_FILL_SOLID")]]
+    [[Builtin("llvm", "0x3")]]
+    @Constant D3D11_FILL_MODE D3D11_FILL_SOLID;
+
+//--------------------------------------------------------------------------------------
+// enum D3D11_CULL_MODE
+//--------------------------------------------------------------------------------------
+
+    [[Builtin("c++", "D3D11_CULL_MODE")]]
+    [[Builtin("llvm", "u32")]]
+    type D3D11_CULL_MODE;
+
+
+    [[Builtin("c++", "D3D11_CULL_NONE")]]
+    [[Builtin("llvm", "0x1")]]
+    @Constant D3D11_CULL_MODE D3D11_CULL_NONE;
+
+    [[Builtin("c++", "D3D11_CULL_FRONT")]]
+    [[Builtin("llvm", "0x2")]]
+    @Constant D3D11_CULL_MODE D3D11_CULL_FRONT;
+
+    [[Builtin("c++", "D3D11_CULL_BACK")]]
+    [[Builtin("llvm", "0x3")]]
+    @Constant D3D11_CULL_MODE D3D11_CULL_BACK;
+
+/* Pattern for D3D11 enums:
+
+    [[Builtin("c++", "TYPE")]]
+    [[Builtin("llvm", "u32")]]
+    type TYPE;
+
+
+    [[Builtin("c++", "NAME")]]
+    [[Builtin("llvm", "VALUE")]]
+    @Constant TYPE NAME;
+*/
+
+//--------------------------------------------------------------------------------------
+// type RasterizerState
+//--------------------------------------------------------------------------------------
+
+    [[Builtin("hlsl", "RasterizerState")]]
+    [[Builtin("c++", "ID3D11RasterizerState*")]]
+    [[Builtin("llvm", "v*")]]
+    type RasterizerState;
+
+    [[Builtin("c++", "spark::d3d11::CreateRasterizerState(device, {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})")]]
+    [[Builtin("llvm", "FooBarBaz!")]]
+    @Constant RasterizerState RasterizerState(
+        @Constant D3D11_FILL_MODE   fillMode,
+        @Constant D3D11_CULL_MODE   cullMode,
+        @Constant bool              frontCounterClockwise,
+        @Constant int               depthBias,
+        @Constant float             depthBiasClamp,
+        @Constant float             slopeScaledDepthBias,
+        @Constant bool              depthClipEnable,
+        @Constant bool              scissorEnable,
+        @Constant bool              multisampleEnable,
+        @Constant bool              antialiasedLineEnable );
+
+    @Constant RasterizerState RasterizerState(
+        @Constant D3D11_CULL_MODE   cullMode )
+    {
+        return RasterizerState(
+            fillMode:               D3D11_FILL_SOLID,
+            cullMode:               cullMode,
+            frontCounterClockwise:  false,
+            depthBias:              0,
+            slopeScaledDepthBias:   0.0f,
+            depthBiasClamp:         0.0f,
+            depthClipEnable:        true,
+            scissorEnable:          false,
+            multisampleEnable:      false,
+            antialiasedLineEnable:  false );
+    }
+
+    //
+
+	@AssembledVertex T operator()[type T]( @Uniform VertexStream[T] stream, @AssembledVertex uint index )
+	{
+		@Uniform VertexBuffer buffer = stream.buffer;
+		@Uniform uint offset = stream.offset;
+		@Uniform uint stride = stream.stride;
+		return __VertexFetch[T]( buffer, offset, stride, index );
+	}
+
+	concept Linear[type T]
+	{
+		abstract T operator+( T left, T right );
+		abstract T operator-( T left, T right );
+		abstract T operator*( T left, float right );
+	}
+
+	T lerp[type T, implicit Linear[T]]( T v0, T v1, float a )
+	{
+		return v0 + (v1 - v0) * a;
+	}
+
+	[[Builtin("hlsl", "((uint4) {0})")]]
+	uint4 uint4( uint s );
+
+	[[Builtin("hlsl", "uint4({0}, {1}, {2}, {3})")]]
+	uint4 uint4( uint x, uint y, uint z, uint w );
+
+	[[Builtin("hlsl", "((uint4) {0})")]]
+	uint4 uint4( int s );
+
+	[[Builtin("hlsl", "uint4({0}, {1}, {2}, {3})")]]
+	uint4 uint4( int x, int y, int z, int w );
+
+	[[Builtin("hlsl", "((float2) {0})")]]
+	float2 float2( float s );
+
+	[[Builtin("hlsl", "float2({0}, {1})")]]
+	float2 float2( float x, float y);
+
+	[[Builtin("hlsl", "((float3) {0})")]]
+	float3 float3( float s );
+
+	[[Builtin("hlsl", "float3({0}, {1}, {2})")]]
+	float3 float3( float x, float y, float z );
+
+	[[Builtin("hlsl", "float3({0}, {1})")]]
+	float3 float3( float2 xy, float z );
+
+	[[Builtin("hlsl", "((float3) {0})")]]
+	float3 float3( float4 xyzw );
+
+	[[Builtin("hlsl", "((float4) {0})")]]
+	float4 float4( float s );
+
+	[[Builtin("hlsl", "float4({0}, {1}, {2}, {3})")]]
+    [[Builtin("c++", "spark::float4({0}, {1}, {2}, {3})")]]
+	float4 float4( float x, float y, float z, float w );
+
+	[[Builtin("hlsl", "normalize({0})")]]
+	float3 normalize( float3 val );
+
+	[[Builtin("hlsl", "dot({0}, {1})")]]
+	float dot( float3 left, float3 right );
+
+	[[Builtin("hlsl", "dot({0}, {1})")]]
+	float dot( float4 left, float4 right );
+
+	[[Builtin("hlsl", "cross({0}, {1})")]]
+	float3 cross( float3 left, float3 right );
+
+	[[Builtin("hlsl", "reflect({0}, {1})")]]
+	float3 reflect( float3 i, float3 n );
+
+	[[Builtin("hlsl", "max({0}, {1})")]]
+	float max( float left, float right );
+
+	[[Builtin("hlsl", "abs({0})")]]
+	float abs( float left );
+
+	[[Builtin("hlsl", "saturate({0})")]]
+	float saturate( float value );
+
+	[[Builtin("hlsl", "clamp({0}, {1}, {2})")]]
+	float clamp( float value, float min, float max );
+
+	[[Builtin("hlsl", "frac({0})")]]
+	float frac( float value );
+
+	[[Builtin("hlsl", "mul({0}, {1})")]]
+	float3 mul( float3 v, float3x3 m );
+
+	[[Builtin("hlsl", "mul({0}, {1})")]]
+	float4 mul( float4 v, float4x4 m );
+
+	[[Builtin("hlsl", "distance({0}, {1})")]]
+	float distance( float2 left, float2 right );
+
+	[[Builtin("hlsl", "distance({0}, {1})")]]
+	float distance( float3 left, float3 right );
+
+	[[Builtin("hlsl", "pow({0}, {1})")]]
+	float pow( float base, float exponent );
+
+	[[Builtin("hlsl", "pow({0}, {1})")]]
+	float3 pow( float3 base, float exponent );
+
+	[[Builtin("hlsl", "({0}).Sample({1}, {2})")]]
+	@Fragment float3 Sample( @Fragment Texture2D[float3] t, @Fragment SamplerState s, @Fragment float2 v );
+
+	[[Builtin("hlsl", "({0}).Sample({1}, {2})")]]
+	@Fragment float4 Sample( @Fragment Texture2D[float4] t, @Fragment SamplerState s, @Fragment float2 v );
+
+	[[Builtin("hlsl", "({0}).Sample({1}, {2})")]]
+	@Fragment float4 Sample( @Fragment TextureCube[float4] t, @Fragment SamplerState s, @Fragment float3 v );
+
+	[[Builtin("hlsl", "({0}).SampleLevel({1}, {2}, {3})")]]
+	T SampleLevel[type T]( Texture2D[T] t, SamplerState s, float2 v, float level );
+
+	[[Builtin("hlsl", "({0})[{1}]")]]
+	T operator()[type T]( Buffer[T] buffer, uint index );
+
+    [[Builtin("hlsl", "(!({0}))")]]
+    bool operator!( bool value );
+
+    [[Builtin("hlsl", "all({0})")]]
+    bool all( float3 value );
+
+    [[Builtin("hlsl", "all({0})")]]
+    bool all( float4 value );
+
+	// Components of vectors
+
+	[[Builtin("hlsl", "({0}).x")]]	float operator(x)( float2 v );
+	[[Builtin("hlsl", "({0}).y")]]	float operator(y)( float2 v );
+
+	[[Builtin("hlsl", "({0}).x")]]	float operator(x)( float3 v );
+	[[Builtin("hlsl", "({0}).y")]]	float operator(y)( float3 v );
+	[[Builtin("hlsl", "({0}).z")]]	float operator(z)( float3 v );
+	[[Builtin("hlsl", "({0}).xyzx")]]	float4 operator(xyzx)( float3 v );
+
+	[[Builtin("hlsl", "({0}).x")]]	float operator(x)( float4 v );
+	[[Builtin("hlsl", "({0}).y")]]	float operator(y)( float4 v );
+	[[Builtin("hlsl", "({0}).z")]]	float operator(z)( float4 v );
+
+	[[Builtin("hlsl", "({0}).w")]]
+    [[Builtin("blend", "GetAlpha")]]
+    float operator(w)( float4 v );
+
+	[[Builtin("hlsl", "({0}).xy")]]	float2 operator(xy)( float4 v );
+	[[Builtin("hlsl", "({0}).xyz")]]	float3 operator(xyz)( float4 v );
+	[[Builtin("hlsl", "({0}).xxxy")]]	float4 operator(xxxy)( float4 v );
+	[[Builtin("hlsl", "({0}).yzxw")]]	float4 operator(yzxw)( float4 v );
+
+	// Components of vectors
+
+	[[Builtin("hlsl", "({0}).x")]]	uint operator(x)( uint4 v );
+	[[Builtin("hlsl", "({0}).y")]]	uint operator(y)( uint4 v );
+	[[Builtin("hlsl", "({0}).z")]]	uint operator(z)( uint4 v );
+	[[Builtin("hlsl", "({0}).w")]]	uint operator(w)( uint4 v );
+
+	// Basic conversions
+	[[Builtin("hlsl", "((float) {0})")]]
+    [[Builtin("blend", "IntToFloat")]]
+    implicit float float( int value );
+
+	[[Builtin("hlsl", "((float) {0})")]]	implicit float float( uint value );
+	[[Builtin("hlsl", "((uint4) {0})")]]	implicit uint4 uint4( ubyte4 value );
+	[[Builtin("hlsl", "((float4) {0})")]]	implicit float4 float4( unorm4 value );
+
+    [[Builtin("hlsl", "((uint) {0})")]]
+    [[Builtin("c++", "((UINT) {0})")]]
+    uint uint( int value );
+
+	[[Builtin("hlsl", "((int) {0})")]]	int int( uint value );
+
+	// Unary operator-
+
+	[[Builtin("hlsl", "-({0})")]]
+	float operator-( int val );
+
+	[[Builtin("hlsl", "-({0})")]]
+	[[Builtin("c++", "(-({0}))")]]
+	float operator-( float val );
+
+	[[Builtin("hlsl", "-({0})")]]
+	float2 operator-( float2 val );
+
+	[[Builtin("hlsl", "-({0})")]]
+	float3 operator-( float3 val );
+
+	[[Builtin("hlsl", "-({0})")]]
+	float4 operator-( float4 val );
+
+	// integer stuff
+
+	// int <op> int
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+	int operator+( int left, int right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	int operator-( int left, int right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+	int operator*( int left, int right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	int operator/( int left, int right );
+
+	[[Builtin("hlsl", "({0}) % ({1})")]]
+	int operator%( int left, int right );
+
+	// uint <op> uint
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+	uint operator+( uint left, uint right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	uint operator-( uint left, uint right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+	uint operator*( uint left, uint right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	uint operator/( uint left, uint right );
+
+	[[Builtin("hlsl", "({0}) % ({1})")]]
+	uint operator%( uint left, uint right );
+
+	// Extra cases...
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	int operator-( uint left, int right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+	int operator*( uint left, int right );
+
+	// comparison
+
+	[[Builtin("hlsl", "({0}) < ({1})")]]
+	bool operator<( int left, int right );
+
+	[[Builtin("hlsl", "({0}) > ({1})")]]
+	bool operator>( int left, int right );
+
+	[[Builtin("hlsl", "({0}) <= ({1})")]]
+	bool operator<=( int left, int right );
+
+	[[Builtin("hlsl", "({0}) >= ({1})")]]
+	bool operator>=( int left, int right );
+
+	[[Builtin("hlsl", "({0}) == ({1})")]]
+	bool operator==( int left, int right );
+
+	[[Builtin("hlsl", "({0}) != ({1})")]]
+	bool operator!=( int left, int right );
+
+	[[Builtin("hlsl", "({0}) < ({1})")]]
+	bool operator<( uint left, uint right );
+
+	[[Builtin("hlsl", "({0}) > ({1})")]]
+	bool operator>( uint left, uint right );
+
+	[[Builtin("hlsl", "({0}) <= ({1})")]]
+	bool operator<=( uint left, uint right );
+
+	[[Builtin("hlsl", "({0}) >= ({1})")]]
+	bool operator>=( uint left, uint right );
+
+	[[Builtin("hlsl", "({0}) == ({1})")]]
+	bool operator==( uint left, uint right );
+
+	[[Builtin("hlsl", "({0}) != ({1})")]]
+	bool operator!=( uint left, uint right );
+
+
+
+	// shifting
+
+	[[Builtin("hlsl", "({0}) << ({1})")]]
+	int operator<<( int left, int right );
+
+	[[Builtin("hlsl", "({0}) << ({1})")]]
+	uint operator<<( uint left, int right );
+
+	[[Builtin("hlsl", "({0}) >> ({1})")]]
+	int operator>>( int left, int right );
+
+	[[Builtin("hlsl", "({0}) >> ({1})")]]
+	uint operator>>( uint left, int right );
+
+
+	[[Builtin("hlsl", "({0}) << ({1})")]]
+	int operator<<( int left, uint right );
+
+	[[Builtin("hlsl", "({0}) << ({1})")]]
+	uint operator<<( uint left, uint right );
+
+	[[Builtin("hlsl", "({0}) >> ({1})")]]
+	int operator>>( int left, uint right );
+
+	[[Builtin("hlsl", "({0}) >> ({1})")]]
+	uint operator>>( uint left, uint right );
+
+	// logical
+
+	[[Builtin("hlsl", "({0}) & ({1})")]]
+	int operator&( int left, int right );
+
+	[[Builtin("hlsl", "({0}) & ({1})")]]
+	uint operator&( uint left, uint right );
+
+	[[Builtin("hlsl", "countbits({0})")]]
+	uint countbits( int value);
+
+	[[Builtin("hlsl", "countbits({0})")]]
+	uint countbits( uint value);
+
+	// bitcast
+
+	[[Builtin("hlsl", "asfloat({0})")]]
+	float asfloat( int value);
+
+	[[Builtin("hlsl", "asfloat({0})")]]
+	float asfloat( uint value);
+
+	// float -op- float
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+	float operator+( float left, float right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	[[Builtin("blend", "SubFloat")]]
+	float operator-( float left, float right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+	float operator*( float left, float right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	float operator/( float left, float right );
+
+	[[Builtin("hlsl", "({0}) < ({1})")]]
+	bool operator<( float left, float right );
+
+	[[Builtin("hlsl", "({0}) > ({1})")]]
+	bool operator>( float left, float right );
+
+	[[Builtin("hlsl", "({0}) <= ({1})")]]
+	bool operator<=( float left, float right );
+
+	[[Builtin("hlsl", "({0}) >= ({1})")]]
+	bool operator>=( float left, float right );
+
+	[[Builtin("hlsl", "({0}) == ({1})")]]
+	bool operator==( float left, float right );
+
+	[[Builtin("hlsl", "({0}) != ({1})")]]
+	bool operator!=( float left, float right );
+
+	[[Builtin("hlsl", "rsqrt({0})")]]
+	float rsqrt( float value );
+
+	// float4 -op- float4
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+    [[Builtin("blend", "AddFloat4")]]
+	float4 operator+( float4 left, float4 right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	float4 operator-( float4 left, float4 right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+    [[Builtin("blend", "MulFloat4")]]
+	float4 operator*( float4 left, float4 right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	float4 operator/( float4 left, float4 right );
+
+	// float3 -op- float3
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+	float3 operator+( float3 left, float3 right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	float3 operator-( float3 left, float3 right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+	float3 operator*( float3 left, float3 right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	float3 operator/( float3 left, float3 right );
+
+	// float -op- float3
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+	float3 operator+( float left, float3 right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	float3 operator-( float left, float3 right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+	float3 operator*( float left, float3 right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	float3 operator/( float left, float3 right );
+
+	// float2 -op- float
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+	float2 operator+( float2 left, float right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	float2 operator-( float2 left, float right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+	float2 operator*( float2 left, float right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	float2 operator/( float2 left, float right );
+
+	// float -op- float2
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+	float2 operator+( float left, float2 right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	float2 operator-( float left, float2 right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+	float2 operator*( float left, float2 right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	float2 operator/( float left, float2 right );
+
+	// float2 -op- float2
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+	float2 operator+( float2 left, float2 right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	float2 operator-( float2 left, float2 right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+	float2 operator*( float2 left, float2 right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	float2 operator/( float2 left, float2 right );
+
+	//
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+	float3 operator+( float3 left, float right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	float3 operator-( float3 left, float right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+	float3 operator*( float3 left, float right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	float3 operator/( float3 left, float right );
+
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+	float4 operator+( float4 left, float right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	float4 operator-( float4 left, float right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+    [[Builtin("blend", "MulFloat4_Float")]]
+	float4 operator*( float4 left, float right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	float4 operator/( float4 left, float right );
+
+
+	[[Builtin("hlsl", "({0}) + ({1})")]]
+	float4 operator+( float left, float4 right );
+
+	[[Builtin("hlsl", "({0}) - ({1})")]]
+	float4 operator-( float left, float4 right );
+
+	[[Builtin("hlsl", "({0}) * ({1})")]]
+    [[Builtin("blend", "MulFloat_Float4")]]
+	float4 operator*( float left, float4 right );
+
+	[[Builtin("hlsl", "({0}) / ({1})")]]
+	float4 operator/( float left, float4 right );
+
+	// float4x4
+
+	[[Builtin("hlsl", "mul({0}, {1})")]]
+	[[Builtin("c++", "({0} * {1})")]]
+	float4x4 mul( float4x4 left, float4x4 right );
+
+	[[Builtin("hlsl", "float4x4({0}, {1}, {2}, {3})")]]
+	float4x4 float4x4( float4 r0, float4 r1, float4 r2, float4 r3 );
+
+	// float3x3
+
+	[[Builtin("hlsl", "((float3x3) {0})")]]
+	float3x3 float3x3( float4x4 m );
+
+	[[Builtin("hlsl", "float3x3({0}, {1}, {2})")]]
+	float3x3 float3x3( float3 r0, float3 r1, float3 r2 );
+
+	[[Builtin("hlsl", "mul({0}, {1})")]]
+	float3 mul( float3x3 m, float3 v );
+
+	// float4x3
+
+	[[Builtin("hlsl", "((float4x3) {0})")]]
+	float4x3 float4x3( float4x4 m );
+
+	[[Builtin("hlsl", "float4x3({0}, {1}, {2}, {3})")]]
+	float4x3 float4x3( float3 r0, float3 r1, float3 r2, float3 r3 );
+
+	[[Builtin("hlsl", "mul({0}, {1})")]]
+	float3 mul( float4 v, float4x3 m );
+
+    // bool
+	[[Builtin("hlsl", "(({0}) & ({1}))")]]
+    bool operator&( bool left, bool right );
+
+	[[Builtin("hlsl", "(({0}) | ({1}))")]]
+    bool operator|( bool left, bool right );
+
+	// Iteration-related:
+
+	[[Builtin("hlsl", "Range")]]
+	type Range;
+
+	[[Builtin("hlsl", "__Range( {0}, {1} )")]]
+	Range Range( int lower, int upper );
+
+	[[Builtin("hlsl", "{0}.lower")]]
+	int operator(lower)(Range range);
+
+	[[Builtin("hlsl", "{0}.upper")]]
+	int operator(upper)(Range range);
+
+    //
+
+	[[Builtin("hlsl", "float4({0}, {1})")]]
+	float4 float4( float3 xyz, float w );
+
+	[[Builtin("hlsl", "float4({0})")]] float4 float4( uint4 value );
+
+	// Implicit Conversions: @AssembledVertex -> @CoarseVertex
+
+	implicit @CoarseVertex T IA2VS[type T]( @AssembledVertex T value )
+	{
+		return value( __ia2vs );
+	}
+
+	// Implicit Conversions: @RasterVertex -> @Fragment
+
+	input @Fragment RasterVertex __rv2f;
+	implicit @Fragment T RV2F[type T]( @RasterVertex T value )
+	{
+		return value( __rv2f );
+	}
+
+	// Implicit Conversions: @Fragment -> @Pixel
+
+	implicit @Pixel T PS2OM[type T]( @Fragment T value )
+	{
+		return value( __ps2om );
+	}
+
+	// Implicit Conversions: @Uniform -> *
+
+	[[Builtin("hlsl", "__UniformRef")]] implicit @CoarseVertex T U2V[type T]( @Uniform T value );
+	[[Builtin("hlsl", "__UniformRef")]] implicit @FineVertex T U2DV[type T]( @Uniform T value );
+	[[Builtin("hlsl", "__UniformRef")]] implicit @RasterVertex T U2RV[type T]( @Uniform T value );
+	[[Builtin("hlsl", "__UniformRef")]] implicit @Fragment T U2F[type T]( @Uniform T value );
+
+	// Implicit Conversions: @Constant -> *
+	[[Builtin("hlsl", "{0}")]]
+	[[Builtin("c++", "{0}")]]
+	[[Builtin("llvm", "__C2U")]]
+	implicit @Uniform T C2U[type T]( @Constant T value );
+
+	[[Builtin("hlsl", "__ConstantRef")]] implicit @CoarseVertex T C2V[type T]( @Constant T value );
+	[[Builtin("hlsl", "__ConstantRef")]] implicit @FineVertex T C2DV[type T]( @Constant T value );
+	[[Builtin("hlsl", "__ConstantRef")]] implicit @RasterVertex T C2RV[type T]( @Constant T value );
+	[[Builtin("hlsl", "__ConstantRef")]] implicit @Fragment T C2F[type T]( @Constant T value );
+
+	abstract output @Uniform DrawSpan IA_DrawSpan;
+
+	// GS pass-through stuff:
+
+	[[Builtin("hlsl", "__F2RHelper")]] @Constant FineVertex __F2RHelper();
+	@RasterVertex FineVertex __f2rhelper = __F2RHelper();
+
+	implicit virtual @RasterVertex T FineToRasterWrapper[type T]( @FineVertex T value )
+	{
+		return value( __f2rhelper );
+	}
+
+	// Define "typed" vector math stuff, to help with interpolation stuff.
+
+	[[Builtin("hlsl", "float3")]]
+	[[Builtin("c++", "spark::float3")]]
+	[[Builtin("llvm", "f32^3")]]
+	type Tangent;
+
+	[[Builtin("hlsl", "({0}) + ({1})")]] Tangent operator+( Tangent left, Tangent right );
+	[[Builtin("hlsl", "({0}) - ({1})")]] Tangent operator-( Tangent left, Tangent right );
+	[[Builtin("hlsl", "({0}) * ({1})")]] Tangent operator*( Tangent left, Tangent right );
+	[[Builtin("hlsl", "({0}) / ({1})")]] Tangent operator/( Tangent left, Tangent right );
+	[[Builtin("hlsl", "({0}) + ({1})")]] Tangent operator+( float left, Tangent right );
+	[[Builtin("hlsl", "({0}) - ({1})")]] Tangent operator-( float left, Tangent right );
+	[[Builtin("hlsl", "({0}) * ({1})")]] Tangent operator*( float left, Tangent right );
+	[[Builtin("hlsl", "({0}) / ({1})")]] Tangent operator/( float left, Tangent right );
+	[[Builtin("hlsl", "({0}) + ({1})")]] Tangent operator+( Tangent left, float right );
+	[[Builtin("hlsl", "({0}) - ({1})")]] Tangent operator-( Tangent left, float right );
+	[[Builtin("hlsl", "({0}) * ({1})")]] Tangent operator*( Tangent left, float right );
+	[[Builtin("hlsl", "({0}) / ({1})")]] Tangent operator/( Tangent left, float right );
+
+	[[Builtin("hlsl", "({0})")]] Tangent Tangent( float3 value );
+	[[Builtin("hlsl", "({0})")]] float3 float3( Tangent value );
+
+	[[Builtin("hlsl", "(mul(float4({0},0), {1}).xyz)")]] Tangent mul( Tangent left, float4x4 right );
+
+
+	// TS pass-through stuff:
+
+	[[Builtin("hlsl", "__C2FHelper")]] @Constant CoarseVertex __C2FHelper();
+	@FineVertex CoarseVertex __c2fhelper = __C2FHelper();
+
+	implicit virtual @FineVertex T CoarseToFineWrapper[type T, implicit Linear[T]]( @CoarseVertex T value )
+	{
+		return value( __c2fhelper );
+	}
+
+	implicit virtual @FineVertex Tangent CoarseToFineTangentWrapper( @CoarseVertex Tangent value )
+	{
+		return value( __c2fhelper );
+	}
+
+    // OM blending stuff
+
+    input @Pixel Pixel OM_Dest;
+}
+
+abstract mixin shader class D3D11GeometryShader
+	extends D3D11DrawPass
+{
+	// Tag to inform code generator:
+	output @Constant int __D3D11GeometryShaderEnabled = 0;
+
+	element GeometryInput;
+	virtual output @Constant int GS_InstanceCount = 1;
+	abstract output @Constant int GS_InputVertexCount;
+	abstract output @Constant int GS_MaxOutputVertexCount;
+
+	input @GeometryInput uint GS_InstanceID;
+	input @GeometryInput Array[FineVertex, GS_InputVertexCount] GS_InputVertices;
+
+	implicit input @RasterVertex GeometryInput __gi2rv;
+	implicit @RasterVertex T GI2RV[type T]( @GeometryInput T value )
+	{
+		return value(__gi2rv);
+	}
+
+	__optional virtual @RasterVertex uint RS_RenderTargetArrayIndex;
+	output @RasterVertex uint __RS_RenderTargetArrayIndex = RS_RenderTargetArrayIndex;
+
+	element GeometryOutput;
+	input @GeometryOutput Stream[RasterVertex] GS_OutputStream;
+	abstract @GeometryOutput void GeometryShader();
+
+	implicit input @GeometryOutput GeometryInput __gi2go;
+    implicit @GeometryOutput T GeometryInputToOutput[type T]( @GeometryInput T value )
+    {
+        return value @ __gi2go;
+    }
+
+	output @GeometryOutput void __GeometryOutput = GeometryShader();
+
+	abstract @RasterVertex T FineToRaster[type T]( @FineVertex T value );
+
+	override @RasterVertex T FineToRasterWrapper[type T]( @FineVertex T value )
+	{
+		return FineToRaster( value );
+	}
+}
+
+abstract mixin shader class D3D11NullTessellation
+    extends D3D11DrawPass
+{
+    // \todo: Need to make sure a programmer can't
+    // extend both this and D3D11Tessellation at the same time...
+
+    // If we know that tessellation is not being used, then we can plumb
+    // values of arbitrary type (not just linear stuff) from coarse to fine
+    implicit @FineVertex T CoarseToFineDefault[type T]( @CoarseVertex T value )
+    {
+        return value( __c2fhelper );
+    }
+}
+
+abstract mixin shader class D3D11Tessellation
+	extends D3D11DrawPass
+{
+	output @Constant int __D3D11TessellationEnabled = 0;
+
+	element __InputPatch;
+	element InputPatch;
+	input @__InputPatch uint HS_PatchID;
+
+	element OutputPatch;
+	element ControlPoint;
+
+	// Implicit Conversions: @InputPatch -> @Output{Patch, ControlPoint}
+
+	input @OutputPatch InputPatch __ip2op;
+	implicit @OutputPatch T IP2OP[type T]( @InputPatch T value )
+	{
+		return value(__ip2op);
+	}
+
+	input @ControlPoint InputPatch __ip2ocp;
+	implicit @ControlPoint T IP2OCP[type T]( @InputPatch T value )
+	{
+		return value(__ip2ocp);
+	}
+
+	// Implicit Conversions: @OutputPatch -> @FineVertex
+
+	input @FineVertex OutputPatch __op2dv;
+	implicit @FineVertex T OP2DV[type T]( @OutputPatch T value )
+	{
+		return value( __op2dv );
+	}
+
+	[[Builtin("hlsl", "__UniformRef")]] implicit @InputPatch T U2IP[type T]( @Uniform T value );
+	[[Builtin("hlsl", "__UniformRef")]] implicit @OutputPatch T U2OP[type T]( @Uniform T value );
+	[[Builtin("hlsl", "__UniformRef")]] implicit @ControlPoint T U2OCP[type T]( @Uniform T value );
+
+	[[Builtin("hlsl", "__ConstantRef")]] implicit @InputPatch T C2IP[type T]( @Constant T value );
+	[[Builtin("hlsl", "__ConstantRef")]] implicit @OutputPatch T C2OP[type T]( @Constant T value );
+	[[Builtin("hlsl", "__ConstantRef")]] implicit @ControlPoint T C2OCP[type T]( @Constant T value );
+
+
+	abstract output @Constant int HS_InputCoarseVertexCount;
+	input @__InputPatch InputCoarseVertexArray[CoarseVertex, HS_InputCoarseVertexCount] HS_InputCoarseVertices;
+
+
+	[[Builtin("hlsl", "{0}")]] implicit @InputPatch T __IP2ip[type T]( @__InputPatch T value );
+	[[Builtin("hlsl", "{0}")]] implicit @OutputPatch T __IP2op[type T]( @__InputPatch T value );
+	[[Builtin("hlsl", "{0}")]] implicit @ControlPoint T __IP2ocp[type T]( @__InputPatch T value );
+
+	input @ControlPoint uint HS_ControlPointID;
+
+	// \todo: This is only required to fix an fxc bug,
+	// and costs overall performance. I'll disable it
+	// for now in hopes it doesn't bit the demo...
+//	output @ControlPoint float __dummyToFixBrokenFXC = 1.0f;
+
+
+	abstract output @Constant int HS_OutputControlPointCount;
+	virtual output @Constant float TS_MaxTessFactor = 64.0f;
+
+	abstract output @Constant TessellationDomain TS_Domain;
+	abstract output @Constant TessellationPartitioning TS_Partitioning;
+	abstract output @Constant TessellationOutputTopology TS_OutputTopology;
+
+	input @FineVertex OutputControlPointArray[ControlPoint, HS_OutputControlPointCount] DS_InputControlPoints;
+
+	concrete element PatchCorner;
+	input @PatchCorner uint HS_PatchCornerID;
+	input @PatchCorner InputPatch __ip2pc;
+	[[Builtin("hlsl", "__UniformRef")]] implicit @PatchCorner T U2PC[type T]( @Uniform T value );
+	[[Builtin("hlsl", "__ConstantRef")]] implicit @PatchCorner T C2PC[type T]( @Constant T value );
+	implicit @PatchCorner T IP2PC[type T]( @InputPatch T value )
+	{
+		return value(__ip2pc);
+	}
+
+	concrete element PatchEdge;
+	input @PatchEdge uint HS_PatchEdgeID;
+	input @PatchEdge InputPatch __ip2pe;
+	input @PatchEdge OutputPatch __op2pe;
+	[[Builtin("hlsl", "__UniformRef")]] implicit @PatchEdge T U2PE[type T]( @Uniform T value );
+	[[Builtin("hlsl", "__ConstantRef")]] implicit @PatchEdge T C2PE[type T]( @Constant T value );
+	abstract output @PatchEdge float HS_EdgeFactor;
+	implicit @PatchEdge T IP2PE[type T]( @InputPatch T value )
+	{
+		return value(__ip2pe);
+	}
+	implicit @PatchEdge T OP2PE[type T]( @OutputPatch T value )
+	{
+		return value(__op2pe);
+	}
+
+	concrete element PatchInterior;
+    input @PatchInterior uint HS_PatchInteriorID;
+	input @PatchInterior InputPatch __ip2pi;
+	input @PatchInterior OutputPatch __op2pi;
+	[[Builtin("hlsl", "__UniformRef")]] implicit @PatchInterior T U2PI[type T]( @Uniform T value );
+	[[Builtin("hlsl", "__ConstantRef")]] implicit @PatchInterior T C2PI[type T]( @Constant T value );
+	abstract output @PatchInterior float HS_InsideFactor;
+	implicit @PatchInterior T IP2PI[type T]( @InputPatch T value )
+	{
+		return value(__ip2pi);
+	}
+	implicit @PatchInterior T OP2PI[type T]( @OutputPatch T value )
+	{
+		return value(__op2pi);
+	}
+
+	/*
+	override element InputPatch;
+	override element ControlPoint;
+	override element OutputPatch;
+	override element FineVertex;
+	*/
+
+	abstract @FineVertex T CoarseToFine[type T, implicit Linear[T]]( @CoarseVertex T value );
+
+	override @FineVertex T CoarseToFineWrapper[type T, implicit Linear[T]]( @CoarseVertex T value )
+	{
+		return CoarseToFine( value );
+	}
+
+	virtual @FineVertex Tangent CoarseToFineTangent( @CoarseVertex Tangent value )
+	{
+		return CoarseToFine( value );
+	}
+
+	override @FineVertex Tangent CoarseToFineTangentWrapper( @CoarseVertex Tangent value )
+	{
+		return CoarseToFineTangent( value );
+	}
+
+    virtual output @OutputPatch bool HS_CullPatch = false;
+
+}
+
+abstract mixin shader class D3D11QuadTessellation
+	extends D3D11Tessellation
+{
+	override TS_Domain = QuadDomain;
+	input @FineVertex float2 DS_DomainLocation;
+    output @Constant int HS_PatchEdgeCount = 4;
+    output @Constant int HS_PatchInsideCount = 2;
+    output @Constant int HS_PatchCornerCount = 4;
+
+	input output @OutputPatch Array[float, 4] HS_EdgeFactors;
+	input output @OutputPatch Array[float, 2] HS_InsideFactors;
+	input output @OutputPatch Array[PatchCorner, 4] HS_PatchCorners;
+    input output @OutputPatch Array[PatchEdge, 4] HS_PatchEdges;
+    input output @OutputPatch Array[PatchInterior, 2] HS_PatchInteriors;
+}
+
+abstract mixin shader class D3D11TriTessellation
+	extends D3D11Tessellation
+{
+	override TS_Domain = TriangleDomain;
+	input @FineVertex float3 DS_DomainLocation;
+    output @Constant int HS_PatchEdgeCount = 3;
+    output @Constant int HS_PatchInsideCount = 1;
+    output @Constant int HS_PatchCornerCount = 3;
+
+	input output @OutputPatch Array[float, 3] HS_EdgeFactors;
+	input output @OutputPatch Array[float, 1] HS_InsideFactors;
+	input output @OutputPatch Array[PatchCorner, 3] HS_PatchCorners;
+    input output @OutputPatch Array[PatchEdge, 3] HS_PatchEdges;
+    input output @OutputPatch Array[PatchInterior, 1] HS_PatchInteriors;
+}

@@ -1,0 +1,79 @@
+===============================================================================
+Introduction
+===============================================================================
+
+This document contains information on building the Spark examples,
+or the compiler libraries and executable.
+
+Contents:
+- Prerequisites
+- Building the Example Programs
+- Building the Spark Compiler and Runtime
+
+===============================================================================
+Prerequisites
+===============================================================================
+
+In order to build the examples from source, or to write an application
+that uses Spark-compiled shaders, you will need:
+
+- Visual Studio 2010
+- Microsoft DirectX SDK
+  - Spark was built using the June 2010 SDK, but should work with any
+    Direct3D 11 SDK release
+
+In order to build the Spark compiler and library from source,
+you will need:
+
+- Visual Studio 2010
+  - The C++ and C# compilers must be installed
+- CMake 2.8.5           (www.cmake.org)
+  - Available at www.cmake.org
+  - Ideally, CMake should be installed in C:\Program Files\
+    or C:\Program Files (x86)\. Otherwise, the "Executable Paths"
+    for the SparkBuildLLVM project will need to be updated.
+
+This package include distributions of some additional build requirements:
+
+- LLVM 2.9              (www.llvm.org)
+  - Located at: spark/external/llvm-2.9
+- GPLex 1.1.1           (plas.fit.qut.edu.au/gplex/)
+  - Located at: spark/external/gplex-distro-1.1.1
+- GPPG 1.3.5            (plas.fit.qut.edu.au/gppg/)
+  - Located at: spark/external/gppg-distro-1.3.5
+
+License information for these packages is in their respective directories.
+
+License information for the DirectX SDK code used (including, e.g., DXUT)
+can be found in spark/examples.
+
+License information for Spark can be found in spark/docs.
+
+===============================================================================
+Building the Example Programs
+===============================================================================
+
+To build the example programs from source:
+
+- Ensure that the appropriate prerequisites have been installed
+- Open spark/spark_examples.sln in VS 2010
+- Select the Debug or Release configuration, as appropriate
+- Select Build -> Build Solution
+
+===============================================================================
+Building the Spark Compiler and Runtime
+===============================================================================
+
+To build the entire Spark package from source:
+
+- Ensure that the prerequisites have been installed
+- Open spark_all.sln in VS 2010
+- Select the Debug or Release configuration, as appropriate
+- Select Build -> Build Solution
+
+The first time that you build, you will see the "CMake LLVM..." and
+"Building LLVM..." steps trigger. These steps may take a long time (tens
+of minutes) to complete.
+
+LLVM is a large project, and a Debug build will consume several
+*gigabytes* of disk space. You have been warned.

@@ -1,0 +1,240 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>8.0.30703</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{778B8278-6619-46EA-82BF-E0E08A96C130}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Spark</RootNamespace>
+    <AssemblyName>Spark</AssemblyName>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <SccProjectName>
+    </SccProjectName>
+    <SccLocalPath>
+    </SccLocalPath>
+    <SccAuxPath>
+    </SccAuxPath>
+    <SccProvider>
+    </SccProvider>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>..\..\bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <CodeAnalysisLogFile>bin\Debug\Spark.dll.CodeAnalysisLog.xml</CodeAnalysisLogFile>
+    <CodeAnalysisUseTypeNameInSuppression>true</CodeAnalysisUseTypeNameInSuppression>
+    <CodeAnalysisModuleSuppressionsFile>GlobalSuppressions.cs</CodeAnalysisModuleSuppressionsFile>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSetDirectories>;C:\Program Files (x86)\Microsoft Visual Studio 10.0\Team Tools\Static Analysis Tools\\Rule Sets</CodeAnalysisRuleSetDirectories>
+    <CodeAnalysisIgnoreBuiltInRuleSets>false</CodeAnalysisIgnoreBuiltInRuleSets>
+    <CodeAnalysisRuleDirectories>;C:\Program Files (x86)\Microsoft Visual Studio 10.0\Team Tools\Static Analysis Tools\FxCop\\Rules</CodeAnalysisRuleDirectories>
+    <CodeAnalysisIgnoreBuiltInRules>false</CodeAnalysisIgnoreBuiltInRules>
+    <CodeAnalysisFailOnMissingRules>false</CodeAnalysisFailOnMissingRules>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <OutputPath>..\..\bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <CodeAnalysisLogFile>bin\Release\Spark.dll.CodeAnalysisLog.xml</CodeAnalysisLogFile>
+    <CodeAnalysisUseTypeNameInSuppression>true</CodeAnalysisUseTypeNameInSuppression>
+    <CodeAnalysisModuleSuppressionsFile>GlobalSuppressions.cs</CodeAnalysisModuleSuppressionsFile>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSetDirectories>;C:\Program Files (x86)\Microsoft Visual Studio 10.0\Team Tools\Static Analysis Tools\\Rule Sets</CodeAnalysisRuleSetDirectories>
+    <CodeAnalysisRuleDirectories>;C:\Program Files (x86)\Microsoft Visual Studio 10.0\Team Tools\Static Analysis Tools\FxCop\\Rules</CodeAnalysisRuleDirectories>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="QUT.ShiftReduceParser">
+      <HintPath>..\..\external\gppg-distro-1.3.5\binaries\QUT.ShiftReduceParser.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="AbstractSyntax\AbstractSyntax.cs" />
+    <Compile Include="Builder.cs" />
+    <Compile Include="Compiler\Compiler.cs" />
+    <Compile Include="DiagnosticSink.cs" />
+    <Compile Include="Emit\CPlusPlus\EmitTargetCPP.cs" />
+    <Compile Include="Emit\D3D11\D3D11DomainShader.cs" />
+    <Compile Include="Emit\D3D11\D3D11GeometryShader.cs" />
+    <Compile Include="Emit\D3D11\D3D11HullShader.cs" />
+    <Compile Include="Emit\D3D11\D3D11InputAssembler.cs" />
+    <Compile Include="Emit\D3D11\D3D11PixelShader.cs" />
+    <Compile Include="Emit\D3D11\D3D11Stage.cs" />
+    <Compile Include="Emit\D3D11\D3D11VertexShader.cs" />
+    <Compile Include="Emit\EmitContext.cs" />
+    <Compile Include="Emit\IEmitTarget.cs" />
+    <Compile Include="Emit\HLSL\EmitContextHLSL.cs" />
+    <Compile Include="Emit\LazyEmitBlock.cs" />
+    <Compile Include="Emit\Span.cs" />
+    <Compile Include="Identifier.cs" />
+    <Compile Include="Mid\MidAttributeDecl.cs" />
+    <Compile Include="Mid\MidAttributeFetch.cs" />
+    <Compile Include="Mid\MidDump.cs" />
+    <Compile Include="Mid\MidFieldDecl.cs" />
+    <Compile Include="Mid\MidLabel.cs" />
+    <Compile Include="Mid\MidMarkOutputs.cs" />
+    <Compile Include="Mid\MidMemberDecl.cs" />
+    <Compile Include="Mid\MidElementDecl.cs" />
+    <Compile Include="Mid\MidEmitContext.cs" />
+    <Compile Include="Mid\MidExp.cs" />
+    <Compile Include="Mid\MidGenericDecl.cs" />
+    <Compile Include="Mid\MidMemberTerm.cs" />
+    <Compile Include="Mid\MidMethodDecl.cs" />
+    <Compile Include="Mid\MidModuleDecl.cs" />
+    <Compile Include="Mid\MidPipelineDecl.cs" />
+    <Compile Include="Mid\MidScalarizeOutputs.cs" />
+    <Compile Include="Mid\MidSimplify.cs" />
+    <Compile Include="Mid\MidType.cs" />
+    <Compile Include="Mid\MidUniformDecl.cs" />
+    <Compile Include="Mid\MidVar.cs" />
+    <Compile Include="Parser\Lexer.cs" />
+    <Compile Include="Parser\LexerBase.cs" />
+    <Compile Include="Parser\Parser.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ResolvedSyntax\IResAttributeDecl.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResConceptClass.cs" />
+    <Compile Include="ResolvedSyntax\IResContainerRef.cs" />
+    <Compile Include="ResolvedSyntax\IResElementDecl.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResElementRef.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResExp.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResFieldDecl.cs" />
+    <Compile Include="ResolvedSyntax\IResGenericDecl.cs" />
+    <Compile Include="ResolvedSyntax\IResGenericRef.cs" />
+    <Compile Include="ResolvedSyntax\IResGlobalDecl.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResMemberDecl.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResMemberRef.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResMemberSpec.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResMemberTerm.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResMethodDecl.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResModuleDecl.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResPipelineDecl.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResPipelineRef.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResStructDecl.cs" />
+    <Compile Include="ResolvedSyntax\IResTerm.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResTypeSlotDecl.cs" />
+    <Compile Include="ResolvedSyntax\IResTypeExp.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\IResTypeParamDecl.cs" />
+    <Compile Include="ResolvedSyntax\IResVarDecl.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\ResAttributeFetch.cs" />
+    <Compile Include="ResolvedSyntax\ResBreakExp.cs" />
+    <Compile Include="ResolvedSyntax\ResErrorTerm.cs" />
+    <Compile Include="ResolvedSyntax\ResExp.cs" />
+    <Compile Include="ResolvedSyntax\ResGlobalMemberTerm.cs" />
+    <Compile Include="ResolvedSyntax\ResKind.cs" />
+    <Compile Include="ResolvedSyntax\ResLabelExp.cs" />
+    <Compile Include="ResolvedSyntax\ResLexicalID.cs" />
+    <Compile Include="ResolvedSyntax\ResLit.cs" />
+    <Compile Include="ResolvedSyntax\ResMemberConcretenessMode.cs" />
+    <Compile Include="ResolvedSyntax\ResMemberDeclMode.cs" />
+    <Compile Include="ResolvedSyntax\ResMemberGenericApp.cs" />
+    <Compile Include="ResolvedSyntax\ResMethodApp.cs" />
+    <Compile Include="ResolvedSyntax\ResSimpleType.cs" />
+    <Compile Include="ResolvedSyntax\ResFreqQualType.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\ResMemberBind.cs" />
+    <Compile Include="ResolvedSyntax\ResMemberSpec.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\ResPipelineRef.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ResolvedSyntax\ResTag.cs" />
+    <Compile Include="ResolvedSyntax\ResTypeVarRef.cs" />
+    <Compile Include="ResolvedSyntax\ResVarRef.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Resolve\IResContainerBuilder.cs" />
+    <Compile Include="Resolve\Res.cs" />
+    <Compile Include="Resolve\ResAttributeDecl.cs" />
+    <Compile Include="Resolve\ResConceptClassDecl.cs" />
+    <Compile Include="Resolve\ResDeclCategory.cs" />
+    <Compile Include="Resolve\ResElementDecl.cs" />
+    <Compile Include="Resolve\ResEnv.cs" />
+    <Compile Include="Resolve\ResFieldDecl.cs" />
+    <Compile Include="Resolve\ResGenericDecl.cs" />
+    <Compile Include="Resolve\ResMemberDecl.cs" />
+    <Compile Include="Resolve\ResMemberRef.cs" />
+    <Compile Include="Resolve\ResMethodDecl.cs" />
+    <Compile Include="Resolve\ResModuleDecl.cs" />
+    <Compile Include="Resolve\ResolveContext.cs" />
+    <Compile Include="Resolve\ResOverloadedTerm.cs" />
+    <Compile Include="Resolve\ResParamDecl.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Resolve\ResPipelineDecl.cs" />
+    <Compile Include="Resolve\ResStructDecl.cs" />
+    <Compile Include="Resolve\ResTypeParamDecl.cs" />
+    <Compile Include="Resolve\ResTypeSlotDecl.cs" />
+    <Compile Include="Resolve\ResVarDecl.cs" />
+    <Compile Include="SourceRange.cs" />
+    <Compile Include="ResolvedSyntax\Substitution.cs" />
+    <Compile Include="Utilities.cs" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <None Include="Parser\Lexer.lex" />
+    <None Include="Parser\Parser.y" />
+    <EmbeddedResource Include="stdlib.spark" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PreBuildEvent>
+    </PreBuildEvent>
+  </PropertyGroup>
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
