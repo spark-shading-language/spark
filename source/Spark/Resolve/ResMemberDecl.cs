@@ -21,14 +21,17 @@ using Spark.ResolvedSyntax;
 
 namespace Spark.Resolve
 {
-    public abstract class ResMemberDecl : Builder, IResMemberDecl
+    public abstract class ResMemberDecl : IResMemberDecl
     {
+        private ILazy<IResMemberLineDecl> _line;
+        private SourceRange _range;
+        private ResLexicalID _instanceLexicalID = new ResLexicalID();
+        private Identifier _name;
+
         public ResMemberDecl(
-            IResMemberLineDecl line,
-            IBuilder parent,
+            ILazy<IResMemberLineDecl> line,
             SourceRange range,
             Identifier name)
-            : base(parent)
         {
             _line = line;
             _range = range;
@@ -40,19 +43,26 @@ namespace Spark.Resolve
             return string.Format("{0} // {1}", _name, _range);
         }
 
-        public IResMemberLineDecl Line { get { return _line; } }
+        // IResMemberDecl
 
         public SourceRange Range { get { return _range; } }
-        public ResLexicalID OriginalLexicalID { get { return Line.OriginalLexicalID; } }
-        public ResLexicalID InstanceLexicalID { get { return _instanceLexicalID; } }
         public Identifier Name { get { return _name; } }
+        public IResMemberLineDecl Line { get { return _line.Value; } }
         public abstract IResMemberRef MakeRef(SourceRange range, IResMemberTerm memberTerm);
 
-        public static ResMemberDecl CreateInheritedDecl(
+        /*
+         * 
+         * TIM: the following stuff isn't accessible through IResMemberDecl, so why does it exist?
+         * 
+        public ResLexicalID OriginalLexicalID { get { return Line.OriginalLexicalID; } }
+        public ResLexicalID InstanceLexicalID { get { return _instanceLexicalID; } }
+         * That includes the following, too:
+        */
+
+        public static IResMemberDecl CreateInheritedDecl(
             ResolveContext resContext,
             IResContainerBuilderRef resContainer,
-            IResMemberLineDecl resLine,
-            IBuilder parent,
+            ILazy<IResMemberLineDecl> resLine,
             SourceRange range,
             IResMemberRef memberRef)
         {
@@ -64,68 +74,95 @@ namespace Spark.Resolve
                 resContext,
                 resContainer,
                 resLine,
-                parent,
                 range,
                 memberRef);
         }
 
-        public abstract ResMemberDecl CreateInheritedDeclImpl(
+        public abstract IResMemberDecl CreateInheritedDeclImpl(
             ResolveContext resContext,
             IResContainerBuilderRef resContainer,
-            IResMemberLineDecl resLine,
-            IBuilder parent,
+            ILazy<IResMemberLineDecl> resLine,
             SourceRange range,
             IResMemberRef memberRef );
-
-        private IResMemberLineDecl _line;
-        private SourceRange _range;
-        private ResLexicalID _instanceLexicalID = new ResLexicalID();
-        private Identifier _name;
     }
 
-    public class ResMemberNameGroup : Builder, IResMemberNameGroup
+    public class ResMemberNameGroupBuilder : NewBuilder<IResMemberNameGroup>
     {
-        public ResMemberNameGroup(
-            IResContainerFacetBuilder parent,
-            Identifier name)
-            : base(parent)
-        {
-            if( parent != null )
-                parent.AddBuildAction(this.DoneBuilding);
+        private IResContainerFacetBuilder _facet;
+        private Identifier _name;
+        private Dictionary<ResMemberFlavor, ResMemberCategoryGroupBuilder> _categoryGroups =
+            new Dictionary<ResMemberFlavor, ResMemberCategoryGroupBuilder>();
 
-            _container = parent;
+        public ResMemberNameGroupBuilder(
+            ILazyFactory lazyFactory,
+            IResContainerFacetBuilder facet,
+            Identifier name )
+            : base(lazyFactory)
+        {
+            _facet = facet;
             _name = name;
+
+            var resMemberNameGroup = new ResMemberNameGroup(
+                name,
+                NewLazy(() => (from cgb in _categoryGroups.Values select cgb.Value).Eager()));
+            SetValue(resMemberNameGroup);
+        }
+
+        public Identifier Name { get { return _name; } }
+
+        public IEnumerable<ResMemberCategoryGroupBuilder> Categories
+        {
+            get { return _categoryGroups.Values; }
+        }
+
+        public ResMemberCategoryGroupBuilder GetMemberCategoryGroup(ResMemberCategory category)
+        {
+            AssertBuildable();
+            return _categoryGroups.Cache(category.Flavor,
+                () => new ResMemberCategoryGroupBuilder(_facet, this, category));
+        }
+    }
+
+    public class ResMemberNameGroup : IResMemberNameGroup
+    {
+        private Identifier _name;
+        private ILazy<IEnumerable<IResMemberCategoryGroup>> _categories;
+
+        private Dictionary<ResMemberFlavor, IResMemberCategoryGroup> _cachedCategoryGroups;
+
+        public ResMemberNameGroup(
+            Identifier name,
+            ILazy<IEnumerable<IResMemberCategoryGroup>> categories )
+        {
+            _name = name;
+            _categories = categories;
         }
 
         public Identifier Name { get { return _name; } }
 
         public IEnumerable<IResMemberCategoryGroup> Categories
         {
-            get { Force(); return _categoryGroups.Values; }
+            get { return _categories.Value; }
         }
 
-        public IEnumerable<ResMemberCategoryGroup> Categories_Build
+        private Dictionary<ResMemberFlavor, IResMemberCategoryGroup> CachedCategoryGroups
         {
-            get { return _categoryGroups.Values; }
+            get
+            {
+                if (_cachedCategoryGroups == null)
+                {
+                    _cachedCategoryGroups = new Dictionary<ResMemberFlavor, IResMemberCategoryGroup>();
+                    foreach (var mcg in _categories.Value)
+                        _cachedCategoryGroups.Add(mcg.Flavor, mcg);
+                }
+                return _cachedCategoryGroups;
+            }
         }
 
-        public ResMemberCategoryGroup GetMemberCategoryGroup(ResMemberCategory category)
+        public IResMemberCategoryGroup FindCategoryGroup(ResMemberCategory category)
         {
-            return _categoryGroups.Cache(category.Flavor,
-                () => new ResMemberCategoryGroup(_container, this, category));
+            return CachedCategoryGroups.Cache(category.Flavor, () => null);
         }
-
-        public ResMemberCategoryGroup FindCategoryGroup(ResMemberCategory category)
-        {
-            ResMemberCategoryGroup result = null;
-            _categoryGroups.TryGetValue(category.Flavor, out result);
-            return result;
-        }
-
-        private IResContainerFacetBuilder _container;
-        private Identifier _name;
-
-        private Dictionary<ResMemberFlavor, ResMemberCategoryGroup> _categoryGroups = new Dictionary<ResMemberFlavor, ResMemberCategoryGroup>();
     }
 
     public class ResMemberNameGroupSpec : IResMemberNameGroupSpec
@@ -154,27 +191,38 @@ namespace Spark.Resolve
         private IResMemberNameGroup _decl;
     }
 
-    public class ResMemberCategoryGroup : Builder, IResMemberCategoryGroup
+    public class ResMemberCategoryGroupBuilder : NewBuilder<IResMemberCategoryGroup>
     {
-        public ResMemberCategoryGroup(
-            IResContainerFacetBuilder container,
-            ResMemberNameGroup nameGroup,
-            ResMemberCategory category)
-            : base(nameGroup)
-        {
-            nameGroup.AddBuildAction(this.DoneBuilding);
+        private IResContainerFacetBuilder _facetBuilder;
+        private ResMemberNameGroupBuilder _nameGroupBuilder;
+        private ResMemberCategory _category;
 
-            _container = container;
-            _nameGroup = nameGroup;
+        private List<ResMemberLineDeclBuilder> _lines = new List<ResMemberLineDeclBuilder>();
+
+
+        public ResMemberCategoryGroupBuilder(
+            IResContainerFacetBuilder facetBuilder,
+            ResMemberNameGroupBuilder nameGroupBuilder,
+            ResMemberCategory category )
+            : base(nameGroupBuilder.LazyFactory)
+        {
+            _facetBuilder = facetBuilder;
+            _nameGroupBuilder = nameGroupBuilder;
             _category = category;
+
+            var resMemberCategoryGroup = new ResMemberCategoryGroup(
+                Name,
+                Flavor,
+                NewLazy(() => (from lineBuilder in _lines select lineBuilder.Value).Eager()));
+            SetValue(resMemberCategoryGroup);
         }
 
-        public ResMemberNameGroup NameGroup { get { return _nameGroup; } }
-        public Identifier Name { get { return _nameGroup.Name; } }
+        public ResMemberNameGroupBuilder NameGroup { get { return _nameGroupBuilder; } }
+        public Identifier Name { get { return _nameGroupBuilder.Name; } }
         public ResMemberFlavor Flavor { get { return _category.Flavor; } }
         public ResMemberCategory Category { get { return _category; } }
 
-        public IResContainerFacetBuilder Container { get { return _container; } }
+        public IResContainerFacetBuilder Container { get { return _facetBuilder; } }
 
         public void AddLine(ResMemberLineDeclBuilder line)
         {
@@ -182,26 +230,32 @@ namespace Spark.Resolve
             _lines.Add(line);
         }
 
-        public IEnumerable<IResMemberLineDecl> Lines
-        {
-            get
-            {
-                Force();
-                foreach (var lazyLine in _lines)
-                    yield return lazyLine.Value;
-            }
-        }
-
-        public IEnumerable<ResMemberLineDeclBuilder> Lines_Build
+        public IEnumerable<ResMemberLineDeclBuilder> Lines
         {
             get { return _lines; }
         }
 
-        private IResContainerFacetBuilder _container;
-        private ResMemberNameGroup _nameGroup;
-        private ResMemberCategory _category;
+    }
 
-        private List<ResMemberLineDeclBuilder> _lines = new List<ResMemberLineDeclBuilder>();
+    public class ResMemberCategoryGroup : IResMemberCategoryGroup
+    {
+        private Identifier _name;
+        private ResMemberFlavor _flavor;
+        private ILazy<IEnumerable<IResMemberLineDecl>> _lines;
+
+        public ResMemberCategoryGroup(
+            Identifier name,
+            ResMemberFlavor flavor,
+            ILazy<IEnumerable<IResMemberLineDecl>> lines )
+        {
+            _name = name;
+            _flavor = flavor;
+            _lines = lines;
+        }
+
+        public Identifier Name { get { return _name; } }
+        public ResMemberFlavor Flavor { get { return _flavor; } }
+        public IEnumerable<IResMemberLineDecl> Lines { get { return _lines.Value; } }
     }
 
     public class ResMemberCategoryGroupSpec : IResMemberCategoryGroupSpec

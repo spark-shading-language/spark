@@ -21,28 +21,75 @@ using Spark.ResolvedSyntax;
 
 namespace Spark.Resolve
 {
-    class ResFieldDecl : ResMemberDecl, IResFieldDecl
+    class ResFieldDeclBuilder : NewBuilder<IResFieldDecl>
     {
-        public ResFieldDecl(
-            IResMemberLineDecl line,
-            IBuilder parent,
+        private IResTypeExp _type;
+        private IResExp _init;
+
+        public ResFieldDeclBuilder(
+            ILazyFactory lazyFactory,
+            ILazy<IResMemberLineDecl> resLine,
             SourceRange range,
-            Identifier name)
-            : base(line, parent, range, name)
+            Identifier name )
+            : base(lazyFactory)
         {
+            var resFieldDecl = new ResFieldDecl(
+                resLine,
+                range,
+                name,
+                NewLazy(() => _type),
+                NewLazy(() => _init));
+            SetValue(resFieldDecl);
         }
 
         public IResTypeExp Type
         {
-            get { Force(); return _type; }
+            get { return _type; }
             set { AssertBuildable(); _type = value; }
         }
 
         public IResExp Init
         {
-            get { Force(); return _init; }
+            get { return _init; }
             set { AssertBuildable(); _init = value; }
         }
+    }
+
+    class ResFieldDecl : ResMemberDecl, IResFieldDecl
+    {
+        private ILazy<IResTypeExp> _type;
+        private ILazy<IResExp> _init;
+
+        public ResFieldDecl(
+            ILazy<IResMemberLineDecl> line,
+            SourceRange range,
+            Identifier name,
+            ILazy<IResTypeExp> type,
+            ILazy<IResExp> init )
+            : base(line, range, name)
+        {
+            _type = type;
+            _init = init;
+        }
+
+        public static IResFieldDecl Build(
+            ILazyFactory lazyFactory,
+            ILazy<IResMemberLineDecl> resLine,
+            SourceRange range,
+            Identifier name,
+            Action<ResFieldDeclBuilder> action)
+        {
+            var builder = new ResFieldDeclBuilder(
+                lazyFactory,
+                resLine,
+                range,
+                name);
+            builder.AddAction(() => action(builder));
+            builder.DoneBuilding();
+            return builder.Value;
+        }
+
+        // ResMemberDecl
 
         public override IResMemberRef MakeRef(SourceRange range, IResMemberTerm memberTerm)
         {
@@ -52,32 +99,43 @@ namespace Spark.Resolve
                 memberTerm);
         }
 
-        public override ResMemberDecl CreateInheritedDeclImpl(
+        public override IResMemberDecl CreateInheritedDeclImpl(
                     ResolveContext resContext,
                     IResContainerBuilderRef resContainer,
-                    IResMemberLineDecl resLine,
-                    IBuilder parent,
+                    ILazy<IResMemberLineDecl> resLine,
                     SourceRange range,
                     IResMemberRef memberRef)
         {
             var firstRef = (ResFieldRef)memberRef;
             var firstDecl = firstRef.Decl;
 
-            var result = new ResFieldDecl(
+            var result = ResFieldDecl.Build(
+                resContext.LazyFactory,
                 resLine,
-                parent,
                 range,
-                firstDecl.Name);
-            result.AddBuildAction(() =>
-            {
-                result.Type = firstRef.Type;
-                result.Init = firstRef.Init;
-            });
+                firstDecl.Name,
+                (builder) =>
+                {
+                    builder.Type = firstRef.Type;
+                    builder.Init = firstRef.Init;
+                });
+
             return result;
         }
 
-        private IResTypeExp _type;
-        private IResExp _init;
+        // IResFieldDecl
+
+        public IResTypeExp Type
+        {
+            get { return _type.Value; }
+        }
+
+        //
+
+        public IResExp Init
+        {
+            get { return _init.Value; }
+        }
     }
 
     class ResFieldRef : ResMemberRef<ResFieldDecl>, IResFieldRef

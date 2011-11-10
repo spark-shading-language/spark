@@ -44,7 +44,10 @@ namespace Spark.ResolvedSyntax
 
     public interface IResMemberNameGroup
     {
+        Identifier Name { get; }
         IEnumerable<IResMemberCategoryGroup> Categories { get; }
+
+        IResMemberCategoryGroup FindCategoryGroup(ResMemberCategory category);
     }
 
     public interface IResMemberNameGroupSpec
@@ -109,9 +112,12 @@ namespace Spark.ResolvedSyntax
 
     public interface IResFacetDecl
     {
-        IEnumerable<IResMemberLineDecl> MemberLines { get; }
-
         IResPipelineRef OriginalPipeline { get; }
         IEnumerable<IResFacetDecl> DirectBases { get; }
+
+        IResMemberNameGroup LookupDirectMembers(Identifier name);
+        IEnumerable<IResMemberLineDecl> MemberLines { get; }
+
+        IResMemberLineDecl FindMember(IResMemberSpec memberSpec);
     }
 }

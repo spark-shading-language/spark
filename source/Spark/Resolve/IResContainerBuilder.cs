@@ -21,20 +21,34 @@ using Spark.ResolvedSyntax;
 
 namespace Spark.Resolve
 {
-    public interface IResContainerFacetBuilder : IBuilder
+    public interface IResContainerFacetBuilder
     {
-        ResMemberNameGroup GetMemberNameGroup(Identifier name);
+        ResMemberNameGroupBuilder GetMemberNameGroup(Identifier name);
+        IEnumerable<ResMemberNameGroupBuilder> MemberNameGroups { get; }
     }
 
-    public interface IResContainerBuilder : IBuilder
+    public interface IResContainerBuilder
     {
         IResContainerFacetBuilder DirectFacetBuilder { get; }
         IEnumerable<IResContainerFacetBuilder> InheritedFacets { get; }
     }
 
-    public interface IResContainerBuilderRef : IResMemberRef
+    public interface IResContainerBuilderRef
+        // : IResMemberRef
     {
         IResContainerBuilder ContainerDecl { get; }
         IResMemberRef CreateMemberRef(SourceRange range, IResMemberDecl memberDecl);
+    }
+
+    public static class ResContainerFacetBuilderExtensions
+    {
+        public static IEnumerable<ResMemberLineDeclBuilder> GetMemberLines(
+            this IResContainerFacetBuilder facetBuilder)
+        {
+            foreach (var mng in facetBuilder.MemberNameGroups)
+                foreach (var mcg in mng.Categories)
+                    foreach (var line in mcg.Lines)
+                        yield return line;
+        }
     }
 }

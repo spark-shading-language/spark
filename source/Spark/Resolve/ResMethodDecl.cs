@@ -21,64 +21,143 @@ using Spark.ResolvedSyntax;
 
 namespace Spark.Resolve
 {
-    public class ResMethodDecl : ResMemberDecl, IResMethodDecl
+    public class ResMethodDeclBuilder : NewBuilder<IResMethodDecl>
     {
-        public ResMethodDecl(
-            IResMemberLineDecl line,
-            IBuilder parent,
+        private IResVarDecl[] _parameters;
+        private IResTypeExp _resultType;
+        private ILazy<IResExp> _lazyBody;
+        private ResMethodFlavor _flavor;
+
+        public ResMethodDeclBuilder(
+            ILazyFactory lazyFactory,
+            ILazy<IResMemberLineDecl> line,
             SourceRange range,
-            Identifier name)
-            : base(line, parent, range, name)
+            Identifier name )
+            : base(lazyFactory)
         {
+            var resMethodDecl = new ResMethodDecl(
+                line,
+                range,
+                name,
+                NewLazy(() => _parameters),
+                NewLazy(() => _resultType),
+                NewLazy(() => _lazyBody == null ? null : _lazyBody.Value),
+                NewLazy(() => _flavor));
+            SetValue(resMethodDecl);
         }
 
-        public override ResMemberDecl CreateInheritedDeclImpl(
+
+        public IEnumerable<IResVarDecl> Parameters
+        {
+            get { return _parameters; }
+            set { AssertBuildable(); _parameters = value.ToArray(); }
+        }
+        public IResTypeExp ResultType
+        {
+            get { return _resultType; }
+            set { AssertBuildable(); _resultType = value; }
+        }
+        public ILazy<IResExp> LazyBody
+        {
+            get { return _lazyBody; }
+            set { AssertBuildable(); _lazyBody = value; }
+        }
+
+        public ResMethodFlavor Flavor
+        {
+            get { return _flavor; }
+            set { AssertBuildable(); _flavor = value; }
+        }
+    }
+
+    public class ResMethodDecl : ResMemberDecl, IResMethodDecl
+    {
+        private ILazy<IEnumerable<IResVarDecl>> _parameters;
+        private ILazy<IResTypeExp> _resultType;
+        private ILazy<IResExp> _body;
+        private ILazy<ResMethodFlavor> _flavor;
+
+        public ResMethodDecl(
+            ILazy<IResMemberLineDecl> line,
+            SourceRange range,
+            Identifier name,
+            ILazy<IEnumerable<IResVarDecl>> parameters,
+            ILazy<IResTypeExp> resultType,
+            ILazy<IResExp> body,
+            ILazy<ResMethodFlavor> flavor )
+            : base(line, range, name)
+        {
+            _parameters = parameters;
+            _resultType = resultType;
+            _body = body;
+            _flavor = flavor;
+        }
+
+        public static IResMethodDecl Build(
+            ILazyFactory lazyFactory,
+            ILazy<IResMemberLineDecl> line,
+            SourceRange range,
+            Identifier name,
+            Action<ResMethodDeclBuilder> action)
+        {
+            var builder = new ResMethodDeclBuilder(
+                lazyFactory,
+                line,
+                range,
+                name);
+            builder.AddAction(() => action(builder));
+            builder.DoneBuilding();
+            return builder.Value;
+        }
+
+        // ResMemberDecl
+
+        public override IResMemberDecl CreateInheritedDeclImpl(
                     ResolveContext resContext,
                     IResContainerBuilderRef resContainer,
-                    IResMemberLineDecl resLine,
-                    IBuilder parent,
+                    ILazy<IResMemberLineDecl> resLine,
                     SourceRange range,
                     IResMemberRef memberRef)
         {
             var firstRef = (ResMethodRef)memberRef;
             var firstDecl = firstRef.Decl;
 
-            var result = new ResMethodDecl(
+            var result = ResMethodDecl.Build(
+                resContext.LazyFactory,
                 resLine,
-                parent,
                 range,
-                firstDecl.Name);
-            // \todo: Substitution!!!
-
-            result.AddBuildAction(() =>
-            {
-                // \todo: Add back in inheritance-related validation checks.
-                /*
-                if (firstRef.Body == null
-                    && memberRefs.OfType<IResMethodRef>().Any((mr) => (mr.Body != null)))
+                firstDecl.Name,
+                (builder) =>
                 {
-                    throw new NotImplementedException();
-                }
-                */
+                    // \todo: More substitution needed?
+                    // \todo: Add back in inheritance-related validation checks?
+                    /*
+                    if (firstRef.Body == null
+                        && memberRefs.OfType<IResMethodRef>().Any((mr) => (mr.Body != null)))
+                    {
+                        throw new NotImplementedException();
+                    }
+                    */
 
-                var subst = new Substitution();
-                var newParams = new List<ResVarDecl>();
-                foreach (var oldParam in firstRef.Parameters)
-                {
-                    var newParam = new ResVarDecl(
-                        range,
-                        oldParam.Name,
-                        oldParam.Type,
-                        oldParam.Decl.Flags );
-                    subst.Insert(oldParam.Decl, newParam);
-                    newParams.Add(newParam);
-                }
+                    var subst = new Substitution();
+                    var newParams = new List<ResVarDecl>();
+                    foreach (var oldParam in firstRef.Parameters)
+                    {
+                        var newParam = new ResVarDecl(
+                            range,
+                            oldParam.Name,
+                            oldParam.Type,
+                            oldParam.Decl.Flags);
+                        subst.Insert(oldParam.Decl, newParam);
+                        newParams.Add(newParam);
+                    }
 
-                result.Parameters = newParams;
-                result.ResultType = firstRef.ResultType;
-                if (firstRef.Body != null)
-                    result.Body = firstRef.Body.Substitute(subst);
-            });
+                    builder.Parameters = newParams;
+                    builder.ResultType = firstRef.ResultType;
+                    if (firstRef.Body != null)
+                        builder.LazyBody = Lazy.Value(firstRef.Body.Substitute(subst));
+                });
+
             return result;
         }
 
@@ -87,32 +166,25 @@ namespace Spark.Resolve
             return new ResMethodRef(range, this, memberTerm);
         }
 
+        // IResMethodDecl
+
         public IEnumerable<IResVarDecl> Parameters
         {
-            get { Force(); return _parameters; }
-            set { AssertBuildable(); _parameters = value.ToArray(); }
+            get { return _parameters.Value; }
         }
         public IResTypeExp ResultType
         {
-            get { Force(); return _resultType; }
-            set { AssertBuildable(); _resultType = value; }
+            get { return _resultType.Value; }
         }
         public IResExp Body
         {
-            get { Force(); return _body; }
-            set { _body = value; }
+            get { return _body.Value; }
         }
 
         public ResMethodFlavor Flavor
         {
-            get { Force(); return _flavor; }
-            set { AssertBuildable();  _flavor = value; }
+            get { return _flavor.Value; }
         }
-
-        private IResVarDecl[] _parameters;
-        private IResTypeExp _resultType;
-        private IResExp _body;
-        private ResMethodFlavor _flavor = ResMethodFlavor.Ordinary;
     }
 
     public class ResMethodRef : ResMemberRef<ResMethodDecl>, IResMethodRef

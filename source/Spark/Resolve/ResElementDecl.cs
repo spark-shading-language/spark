@@ -24,13 +24,14 @@ namespace Spark.Resolve
     public class ResElementDecl : ResMemberDecl, IResElementDecl
     {
         public ResElementDecl(
-            IResMemberLineDecl line,
-            IBuilder parent,
+            ILazy<IResMemberLineDecl> line,
             SourceRange range,
             Identifier name)
-            : base(line, parent, range, name)
+            : base(line, range, name)
         {
         }
+
+        // ResMemberDecl
 
         public override IResMemberRef MakeRef(SourceRange range, IResMemberTerm memberTerm)
         {
@@ -40,18 +41,16 @@ namespace Spark.Resolve
                 memberTerm);
         }
 
-        public override ResMemberDecl CreateInheritedDeclImpl(
+        public override IResMemberDecl CreateInheritedDeclImpl(
                     ResolveContext resContext,
                     IResContainerBuilderRef resContainer,
-                    IResMemberLineDecl resLine,
-                    IBuilder parent,
+                    ILazy<IResMemberLineDecl> resLine,
                     SourceRange range,
                     IResMemberRef memberRef)
         {
             var first = (IResElementRef)memberRef;
             var result = new ResElementDecl(
                 resLine,
-                parent,
                 range,
                 first.Decl.Name);
             return result;

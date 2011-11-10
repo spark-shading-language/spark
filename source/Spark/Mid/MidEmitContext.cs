@@ -402,9 +402,9 @@ namespace Spark.Mid
                     midElement.AddAttribute( midAttr );
                     if( resAttrib.Line.ConcretenessMode == ResMemberConcretenessMode.Abstract )
                         midAttr.IsAbstract = true;
-                    else if( resAttrib.IsInput )
+                    else if( resAttrib.IsInput() )
                         midAttr.IsInput = true;
-                    else if( resAttrib.IsOptional )
+                    else if( resAttrib.IsOptional() )
                         midAttr.IsOptional = true;
                     else if( resAttrib.Line.Tags.Any( ( t ) => t is ResBuiltinTag ) )
                     {}
@@ -436,7 +436,7 @@ namespace Spark.Mid
                     {
                         midAttr = ((MidAttributeRef) midExp).Decl;
                     }
-                    else if( resAttrib.IsOutput )
+                    else if( resAttrib.IsOutput() )
                     {
                         midAttr = new MidAttributeDecl(
                             resAttrib.Name,
@@ -451,7 +451,7 @@ namespace Spark.Mid
                         midAttr.TrySetName( resAttrib.Name, resAttrib.Range );
                     }
                 }
-                if( resAttrib.IsOutput && !midAttr.IsOptional )
+                if( resAttrib.IsOutput() && !midAttr.IsOptional )
                     midAttr.IsForcedOutput = true;
 
                 midAttrWrap.Attribute = midAttr;
@@ -631,7 +631,7 @@ namespace Spark.Mid
 
             midStruct.AddBuildAction(() =>
             {
-                foreach (var resDecl in resStruct.Members)
+                foreach (var resDecl in resStruct.GetMembers())
                 {
                     var midDecl = EmitMemberDecl(midStruct, resDecl, env);
                     midStruct.InsertMemberDecl(resDecl, midDecl);
@@ -666,7 +666,7 @@ namespace Spark.Mid
             var midConcept = new MidConceptClassDecl(
                 parent,
                 resConceptClass.Name,
-                resConceptClass.Members,
+                resConceptClass.GetMembers(),
                 this,
                 env );
             midConcept.DoneBuilding();

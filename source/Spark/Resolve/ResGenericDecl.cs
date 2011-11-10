@@ -21,20 +21,30 @@ using Spark.ResolvedSyntax;
 
 namespace Spark.Resolve
 {
-    public class ResGenericDecl : ResMemberDecl, IResGenericDecl, IResContainerBuilder, IResContainerFacetBuilder
+    public class ResGenericDeclBuilder : NewBuilder<IResGenericDecl>, IResContainerBuilder, IResContainerFacetBuilder
     {
-        public ResGenericDecl(
-            IResMemberLineDecl line,
-            IBuilder parent,
+        private IResGenericParamDecl[] _parameters;
+        private IResMemberDecl _innerDecl;
+
+        public ResGenericDeclBuilder(
+            ILazyFactory lazy,
+            ILazy<IResMemberLineDecl> line,
             SourceRange range,
-            Identifier name)
-            : base(line, parent, range, name)
+            Identifier name )
+            : base(lazy)
         {
+            var resGenericDecl = new ResGenericDecl(
+                line,
+                range,
+                name,
+                NewLazy(() => _parameters),
+                NewLazy(() => _innerDecl));
+            SetValue(resGenericDecl);
         }
 
         public IEnumerable<IResGenericParamDecl> Parameters
         {
-            get { Force(); return _parameters; }
+            get { return _parameters; }
             set { AssertBuildable(); _parameters = value.ToArray(); }
         }
 
@@ -44,23 +54,80 @@ namespace Spark.Resolve
             set { AssertBuildable(); _innerDecl = value; }
         }
 
-        public override ResMemberDecl CreateInheritedDeclImpl(
+        public IResContainerFacetBuilder DirectFacetBuilder
+        {
+            get { return this; }
+        }
+        public IEnumerable<IResContainerFacetBuilder> InheritedFacets
+        {
+            get { return new IResContainerFacetBuilder[] { }; }
+        }
+
+        /*
+        void IResContainerBuilder.AddDirectMemberLine(ResMemberDeclLine memberLine)
+        {
+            throw new NotImplementedException();
+        }
+        */
+        ResMemberNameGroupBuilder IResContainerFacetBuilder.GetMemberNameGroup(Identifier name)
+        {
+            throw new NotImplementedException();
+        }
+
+        IEnumerable<ResMemberNameGroupBuilder> IResContainerFacetBuilder.MemberNameGroups { get { throw new NotFiniteNumberException(); } }
+    }
+
+
+    public class ResGenericDecl : ResMemberDecl, IResGenericDecl
+    {
+        private ILazy<IEnumerable<IResGenericParamDecl>> _parameters;
+        private ILazy<IResMemberDecl> _innerDecl;
+
+        public ResGenericDecl(
+            ILazy<IResMemberLineDecl> line,
+            SourceRange range,
+            Identifier name,
+            ILazy<IEnumerable<IResGenericParamDecl>> parameters,
+            ILazy<IResMemberDecl> innerDecl )
+            : base(line, range, name)
+        {
+            _parameters = parameters;
+            _innerDecl = innerDecl;
+        }
+
+        public static IResGenericDecl Build(
+            ILazyFactory lazyFactory,
+            ILazy<IResMemberLineDecl> line,
+            SourceRange range,
+            Identifier name,
+            Action<ResGenericDeclBuilder> action)
+        {
+            var builder = new ResGenericDeclBuilder(
+                lazyFactory,
+                line,
+                range,
+                name);
+            builder.AddAction(() => action(builder));
+            builder.DoneBuilding();
+            return builder.Value;
+        }
+
+        // ResMemberDecl
+        public override IResMemberDecl CreateInheritedDeclImpl(
                     ResolveContext resContext,
                     IResContainerBuilderRef resContainer,
-                    IResMemberLineDecl resLine,
-                    IBuilder parent,
+                    ILazy<IResMemberLineDecl> resLine,
                     SourceRange range,
                     IResMemberRef memberRef)
         {
             var firstRef = (IResGenericRef)memberRef;
 
-            var result = new ResGenericDecl(
+            var result = ResGenericDecl.Build(
+                resContext.LazyFactory,
                 resLine,
-                parent,
                 range,
-                firstRef.Decl.Name);
-
-            result.AddBuildAction(() =>
+                firstRef.Decl.Name,
+                (builder) =>
             {
                 var newParameters = new List<IResGenericParamDecl>();
                 var subst = new Substitution();
@@ -93,7 +160,7 @@ namespace Spark.Resolve
                     }
 
                 }
-                result.Parameters = newParameters;
+                builder.Parameters = newParameters;
 
                 var args = (from p in newParameters
                             select p.MakeGenericArg()).ToArray();
@@ -111,20 +178,19 @@ namespace Spark.Resolve
                     new ResLexicalID());
                 */
 
-                var resultRef = (IResContainerBuilderRef)resContainer.CreateMemberRef(
+                var thisGenericBuilderRef = new ResGenericBuilderRef(
                     range,
-                    result);
+                    builder,
+                    resContainer);
 
                 var innerDecl = CreateInheritedDecl(
                     resContext,
-                    resultRef,
+                    thisGenericBuilderRef,
                     resLine,
-                    result,
                     range,
                     innerRef);
 
-                innerDecl.DoneBuilding();
-                result.InnerDecl = innerDecl;
+                builder.InnerDecl = innerDecl;
             });
 
             return result;
@@ -135,31 +201,57 @@ namespace Spark.Resolve
             return new ResGenericRef(range, this, memberTerm);
         }
 
-        private IResGenericParamDecl[] _parameters;
-        private IResMemberDecl _innerDecl;
+        // IResGenericDecl
 
-        public IResContainerFacetBuilder DirectFacetBuilder
+        public IEnumerable<IResGenericParamDecl> Parameters
         {
-            get { return this; }
-        }
-        public IEnumerable<IResContainerFacetBuilder> InheritedFacets
-        {
-            get { return new IResContainerFacetBuilder[] { }; }
+            get { return _parameters.Value; }
         }
 
-        /*
-        void IResContainerBuilder.AddDirectMemberLine(ResMemberDeclLine memberLine)
+        public IResMemberDecl InnerDecl
         {
-            throw new NotImplementedException();
+            get { return _innerDecl.Value; }
         }
-        */
-        ResMemberNameGroup IResContainerFacetBuilder.GetMemberNameGroup(Identifier name)
+
+    }
+
+    public class ResGenericBuilderRef : IResContainerBuilderRef
+    {
+        private SourceRange _range;
+        private ResGenericDeclBuilder _genericDeclBuilder;
+        private IResContainerBuilderRef _outerContainerBuilder;
+
+        public ResGenericBuilderRef(
+            SourceRange range,
+            ResGenericDeclBuilder genericDeclBuilder,
+            IResContainerBuilderRef outerContainerBuilder)
         {
-            throw new NotImplementedException();
+            _range = range;
+            _genericDeclBuilder = genericDeclBuilder;
+            _outerContainerBuilder = outerContainerBuilder;
+        }
+
+        IResContainerBuilder IResContainerBuilderRef.ContainerDecl
+        {
+            get { throw new NotImplementedException(); }
+            //get { return Decl; }
+        }
+
+        IResMemberRef IResContainerBuilderRef.CreateMemberRef(SourceRange range, IResMemberDecl memberDecl)
+        {
+            var resGesGenericDecl = _genericDeclBuilder.Value;
+            var resGenericRef = (IResGenericRef) _outerContainerBuilder.CreateMemberRef(range, resGesGenericDecl);
+            return memberDecl.MakeRef(
+                range,
+                new ResMemberGenericApp(
+                    resGenericRef,
+                    (from p in resGenericRef.Parameters
+                     select p.MakeArg(range)).ToArray()));
         }
     }
 
-    public class ResGenericRef : ResMemberRef<ResGenericDecl>, IResGenericRef, IResContainerBuilderRef
+
+    public class ResGenericRef : ResMemberRef<ResGenericDecl>, IResGenericRef
     {
         public ResGenericRef(
             SourceRange range,
@@ -194,21 +286,6 @@ namespace Spark.Resolve
         public override IResMemberRef SubstituteMemberRef(Substitution subst)
         {
             return this.Substitute(subst);
-        }
-
-        IResContainerBuilder IResContainerBuilderRef.ContainerDecl
-        {
-            get { return Decl; }
-        }
-
-        IResMemberRef IResContainerBuilderRef.CreateMemberRef(SourceRange range, IResMemberDecl memberDecl)
-        {
-            return memberDecl.MakeRef(
-                range,
-                new ResMemberGenericApp(
-                    this,
-                    (from p in this.Parameters
-                    select p.MakeArg(range)).ToArray()));
         }
     }
 

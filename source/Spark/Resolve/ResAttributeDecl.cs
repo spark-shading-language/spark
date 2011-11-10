@@ -21,53 +21,103 @@ using Spark.ResolvedSyntax;
 
 namespace Spark.Resolve
 {
-    public class ResAttributeDecl : ResMemberDecl, IResAttributeDecl
+    public class ResAttributeDeclBuilder : NewBuilder<IResAttributeDecl>
     {
-        public ResAttributeDecl(
-            IResMemberLineDecl line,
-            IBuilder parent,
+        public ResAttributeDeclBuilder(
+            ILazyFactory lazyFactory,
+            ILazy<IResMemberLineDecl> line,
             SourceRange range,
-            Identifier name)
-            : base(line, parent, range, name)
+            Identifier name )
+            : base(lazyFactory)
         {
+            var resAttributeDecl = new ResAttributeDecl(
+                line,
+                range,
+                name,
+                NewLazy(() => _type),
+                NewLazy(() => _lazyInit == null ? null : _lazyInit.Value),
+                NewLazy(() => _flags));
+            SetValue(resAttributeDecl);
         }
 
         public IResFreqQualType Type
         {
-            get { Force(); return _type; }
+            get { return _type; }
             set { AssertBuildable(); _type = value; }
         }
 
-        public IResFreqQualType Type_Build
+        public ILazy<IResExp> LazyInit
         {
-            get { return _type; }
+            get { return _lazyInit; }
+            set { AssertBuildable(); _lazyInit = value; }
         }
 
+        public ResAttributeFlags Flags
+        {
+            get { return _flags; }
+            set { AssertBuildable(); _flags = value; }
+        }
+
+        private IResFreqQualType _type;
+        private ILazy<IResExp> _lazyInit;
+        private ResAttributeFlags _flags;
+    }
+
+    public class ResAttributeDecl : ResMemberDecl, IResAttributeDecl
+    {
+        private ILazy<IResFreqQualType> _type;
+        private ILazy<IResExp> _init;
+        private ILazy<ResAttributeFlags> _flags;
+
+        public ResAttributeDecl(
+            ILazy<IResMemberLineDecl> line,
+            SourceRange range,
+            Identifier name,
+            ILazy<IResFreqQualType> type,
+            ILazy<IResExp> init,
+            ILazy<ResAttributeFlags> flags )
+            : base(line, range, name)
+        {
+            _type = type;
+            _init = init;
+            _flags = flags;
+        }
+
+        public static IResAttributeDecl Build(
+            ILazyFactory lazyFactory,
+            ILazy<IResMemberLineDecl> line,
+            SourceRange range,
+            Identifier name,
+            Action<ResAttributeDeclBuilder> action)
+        {
+            var builder = new ResAttributeDeclBuilder(
+                lazyFactory,
+                line,
+                range,
+                name);
+            builder.AddAction(() => action(builder));
+            builder.DoneBuilding();
+            return builder.Value;
+        }
+
+        // IResAttributeDecl
+
+        public IResFreqQualType Type
+        {
+            get { return _type.Value; }
+        }
 
         public IResExp Init
         {
-            get
-            {
-                Force();
-                if (_initBuilder == null)
-                    return null;
-                return _initBuilder.Value;
-            }
+            get { return _init == null ? null : _init.Value; }
         }
 
-        public ILazy<IResExp> InitBuilder
+        public ResAttributeFlags Flags
         {
-            get
-            {
-                Force();
-                return _initBuilder;
-            }
-            set
-            {
-                AssertBuildable();
-                _initBuilder = value;
-            }
+            get { return _flags.Value; }
         }
+
+        // ResMemberDecl
 
         public override IResMemberRef MakeRef(SourceRange range, IResMemberTerm memberTerm)
         {
@@ -77,61 +127,31 @@ namespace Spark.Resolve
                 memberTerm);
         }
 
-        public override ResMemberDecl CreateInheritedDeclImpl(
+        public override IResMemberDecl CreateInheritedDeclImpl(
                     ResolveContext resContext,
                     IResContainerBuilderRef resContainer,
-                    IResMemberLineDecl resLine,
-                    IBuilder parent,
+                    ILazy<IResMemberLineDecl> resLine,
                     SourceRange range,
                     IResMemberRef originalRef)
         {
             var firstRef = (ResAttributeRef)originalRef;
             var firstDecl = firstRef.Decl;
 
-            var result = new ResAttributeDecl(
+            var result = ResAttributeDecl.Build(
+                resContext.LazyFactory,
                 resLine,
-                parent,
                 range,
-                firstDecl.Name);
-            result.AddBuildAction(() =>
+                firstDecl.Name,
+                (builder) =>
                 {
-                    result.IsInput = firstDecl.IsInput;
-                    result.IsOutput = firstDecl.IsOutput;
-                    result.IsOptional = firstDecl.IsOptional;
-
-                    result.Type = firstRef.Type;
-
-                    if (firstRef.Init != null)
-                    {
-                        result.InitBuilder = new Lazy<IResExp>(firstRef.Init);
-                    }
+                    builder.Flags = firstDecl.Flags;
+                    builder.Type = firstRef.Type;
+                    builder.LazyInit = 
+                        builder.LazyFactory.New(() => firstRef.Init);
                 });
+
             return result;
         }
-
-        public bool IsInput
-        {
-            get { Force(); return _isInput; }
-            set { AssertBuildable(); _isInput = value; }
-        }
-
-        public bool IsOutput
-        {
-            get { Force(); return _isOutput; }
-            set { AssertBuildable(); _isOutput = value; }
-        }
-
-        public bool IsOptional
-        {
-            get { Force(); return _isOptional; }
-            set { AssertBuildable(); _isOptional = value; }
-        }
-
-        private bool _isInput = false;
-        private bool _isOutput = false;
-        private bool _isOptional = false;
-        private IResFreqQualType _type;
-        private ILazy<IResExp> _initBuilder;
     }
 
     public class ResAttributeRef : ResMemberRef<ResAttributeDecl>, IResAttributeRef

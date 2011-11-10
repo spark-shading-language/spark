@@ -19,17 +19,43 @@ using System.Text;
 
 namespace Spark.ResolvedSyntax
 {
+    [Flags]
+    public enum ResAttributeFlags
+    {
+        None = 0x0,
+        Input = 0x1,
+        Output = 0x2,
+        Optional = 0x4,
+    }
+
+
     public interface IResAttributeDecl : IResMemberDecl
     {
         IResFreqQualType Type { get; }
         IResExp Init { get; }
-        bool IsInput { get; }
-        bool IsOutput { get; }
-        bool IsOptional { get; }
+        ResAttributeFlags Flags { get; }
     }
 
     public interface IResAttributeRef : IResMemberRef, IResExp
     {
         IResExp Init { get; }
+    }
+
+    public static class ResAttributeExtensions
+    {
+        public static bool IsInput(this IResAttributeDecl attr)
+        {
+            return attr.Flags.HasFlag(ResAttributeFlags.Input);
+        }
+
+        public static bool IsOutput(this IResAttributeDecl attr)
+        {
+            return attr.Flags.HasFlag(ResAttributeFlags.Output);
+        }
+
+        public static bool IsOptional(this IResAttributeDecl attr)
+        {
+            return attr.Flags.HasFlag(ResAttributeFlags.Optional);
+        }
     }
 }

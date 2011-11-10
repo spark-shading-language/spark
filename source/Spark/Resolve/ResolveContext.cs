@@ -127,11 +127,11 @@ namespace Spark.Resolve
         {
             var range = new SourceRange();
             var id = _identifiers.simpleIdentifier(name);
-            var nameGroup = new ResMemberNameGroup(null, id);
-            var categoryGroup = new ResMemberCategoryGroup(
-                    null,
-                    nameGroup,
-                    new ResTypeSlotCategory());
+
+            var nameGroupBuilder = new ResMemberNameGroupBuilder(
+                LazyFactory, null, id);
+
+            var categoryGroupBuilder = nameGroupBuilder.GetMemberCategoryGroup(new ResTypeSlotCategory());
 
             var originalLexicalID = new ResLexicalID();
             var lineBuilder = new ResMemberLineDeclBuilder(
@@ -139,19 +139,18 @@ namespace Spark.Resolve
                 id,
                 originalLexicalID,
                 new ResTypeSlotCategory());
-            var line = lineBuilder.Value;
 
             var decl = new ResTypeSlotDecl(
-                line,
-                null,
+                lineBuilder,
                 range,
                 id);
             lineBuilder.AddTag(new ResBuiltinTag("hlsl", name));
             lineBuilder.AddTag(new ResBuiltinTag("c++", name));
             lineBuilder.AddTag(new ResBuiltinTag("llvm", name));
 
-            nameGroup.DoneBuilding();
-            decl.DoneBuilding();
+            lineBuilder.DoneBuilding();
+            categoryGroupBuilder.DoneBuilding();
+            nameGroupBuilder.DoneBuilding();
 
             Func<SourceRange, IResTypeExp> gen = (r) =>
                 (IResTypeExp) decl.MakeRef(
@@ -172,7 +171,7 @@ namespace Spark.Resolve
 
         private class FacetInfo
         {
-            public ResFacetDecl Facet { get; set; }
+            public ResFacetDeclBuilder Facet { get; set; }
 
             public MemberLineInfo[] MemberLines;
         }
@@ -191,7 +190,7 @@ namespace Spark.Resolve
         {
             ResolveShaderClassDecl(
                 resModule,
-                env,
+                env.NestDiagnostics(),
                 absPipeline.Range,
                 absPipeline.Name,
                 absPipeline.Modifiers,
@@ -220,218 +219,247 @@ namespace Spark.Resolve
             IEnumerable<AbsMemberDecl> absMembers,
             bool ignoreOrderingErrors )
         {
-            var resPipeline = new ResPipelineDecl(null, resModule, range, name);
+            var resPipeline = ResPipelineDecl.Build(
+                LazyFactory,
+                resModule,
+                range,
+                name,
+                (resShaderClassBuilder) =>
+            {
+                BuildResolvedShaderClassDecl(
+                    resShaderClassBuilder,
+                    resModule,
+                    env,
+                    range,
+                    name,
+                    modifiers,
+                    resolveBases,
+                    absMembers,
+                    ignoreOrderingErrors );
+            });
+            resModule.AddDecl(resPipeline);
+        }
+
+        private void BuildResolvedShaderClassDecl(
+            ResPipelineDeclBuilder resShaderClassBuilder,
+            ResModuleDeclBuilder resModule,
+            ResEnv env,
+            SourceRange range,
+            Identifier name,
+            AbsModifiers modifiers,
+            Func<ResEnv, IResPipelineRef[]> resolveBases,
+            IEnumerable<AbsMemberDecl> absMembers,
+            bool ignoreOrderingErrors )
+        {
+            var headerEnv = env.NestDiagnostics();
+
+            var thisPipelineBuilder = new ResPipelineBuilderRef(resShaderClassBuilder);
+
             var thisPipeline = new ResPipelineRef(
                 range,
-                resPipeline,
-                new ResGlobalMemberTerm(range, resModule, resPipeline));
+                resShaderClassBuilder.Value,
+                new ResGlobalMemberTerm(range, resModule, resShaderClassBuilder.Value));
             var thisParameter = new ResVarDecl(
                 range,
                 _identifiers.simpleIdentifier("this"),
                 thisPipeline);
-            var directFacet = new ResFacetDecl(resPipeline, thisPipeline);
 
-            if( modifiers.HasFlag( AbsModifiers.Abstract ) )
-                resPipeline.ConcretenessMode = ResMemberConcretenessMode.Abstract;
+            var directFacet = new ResFacetDeclBuilder(LazyFactory, resShaderClassBuilder, thisPipeline);
 
-            if( modifiers.HasFlag( AbsModifiers.Mixin ) )
+            if (modifiers.HasFlag(AbsModifiers.Abstract))
+                resShaderClassBuilder.ConcretenessMode = ResMemberConcretenessMode.Abstract;
+
+            if (modifiers.HasFlag(AbsModifiers.Mixin))
             {
-                if( modifiers.HasFlag( AbsModifiers.Primary ) )
+                if (modifiers.HasFlag(AbsModifiers.Primary))
                 {
                     env.Error(range,
                         "Shader class '{0}' cannot be declared both 'primary' and 'mixin'",
                         name);
                 }
 
-                resPipeline.MixinMode = ResMixinMode.Mixin;
+                resShaderClassBuilder.MixinMode = ResMixinMode.Mixin;
             }
 
-            resPipeline.ThisPipeline = thisPipeline;
-            resPipeline.ThisParameter = thisParameter;
-            resPipeline.DirectFacet = directFacet;
+            resShaderClassBuilder.ThisPipeline = thisPipeline;
+            resShaderClassBuilder.ThisParameter = thisParameter;
+            resShaderClassBuilder.DirectFacet = directFacet;
 
             var innerEnv = env.NestScope(
                 new ResPipelineScope(thisPipeline, thisParameter));
 
-            resPipeline.AddBuildAction(() =>
+            var bases = resolveBases(env);
+            var facetInfos = new Dictionary<ResFacetDeclBuilder, FacetInfo>();
+
+            resShaderClassBuilder.Bases = bases;
+
+            int baseIndex = 0;
+            foreach (var b in bases)
             {
-                var bases = resolveBases(env);
+                // \todo: This is a big hack... :(
+//                ((IBuilder)b.Decl).ForceDeep();
 
-                var facetInfos = new Dictionary<IResFacetDecl, FacetInfo>();
-
-                resPipeline.Bases = bases;
-
-                int baseIndex = 0;
-                foreach (var b in bases)
+                if (b.MixinMode == ResMixinMode.Primary)
                 {
-                    // \todo: This is a big hack... :(
-                    ((IBuilder)b.Decl).ForceDeep();
-
-                    if (b.MixinMode == ResMixinMode.Primary)
+                    if (baseIndex != 0 && !ignoreOrderingErrors)
                     {
-                        if (baseIndex != 0 && !ignoreOrderingErrors)
-                        {
-                            env.Error(
-                                b.Range,
-                                "Class '{0}' can only list at most one primary base, and it must appear first in the list of bases",
-                                name);
-                        }
+                        env.Error(
+                            b.Range,
+                            "Class '{0}' can only list at most one primary base, and it must appear first in the list of bases",
+                            name);
+                    }
+                }
+
+                baseIndex++;
+            }
+
+            var baseLinearization = Linearize(
+                (from b in bases
+                 select (from f in b.Facets
+                         select f.OriginalPipeline).ToArray()).ToArray());
+
+            Func<IResMemberDecl, SourceRange, IResTerm> pipelineMakeRef = (m, r) =>
+                (new ResMemberSpec(r, thisPipeline, m)).Bind(r,
+                    new ResVarRef(r, thisParameter));
+
+            // First, create derived-class facets for each of the base classes,
+            // using the linearization we computed above. This will ensure
+            // that our facets are in an appropriate order (most- to least-derived)
+            foreach (var b in baseLinearization)
+            {
+                var facet = resShaderClassBuilder.FindOrCreateFacetForBase(b);
+            }
+
+            // Now that we've done that step, we can safely create direct
+            // inheritance links from our direct facet to the associated
+            // base facets that were listed in the declaration:
+            foreach (var b in bases)
+            {
+                var derivedFacet = FindOrCreateFacetForBase(
+                    resShaderClassBuilder,
+                    b,
+                    facetInfos,
+                    innerEnv);
+                directFacet.AddDirectBase(derivedFacet);
+            }
+
+            // Next, populate the list of members for each facet, by
+            // going through the linearized bases again
+            //
+            // We proceed in linearized order (from
+            // "most derived" to "most base"), so that
+            // the resulting list will have the most-derived
+            // declaration of the member at the front of the list.
+            foreach (var b in baseLinearization)
+            {
+                PopulateMembersForBase(
+                    resShaderClassBuilder,
+                    b,
+                    facetInfos,
+                    innerEnv);
+            }
+
+            foreach (var b in baseLinearization)
+            {
+                var facet = FindOrCreateFacetForBase(
+                    resShaderClassBuilder,
+                    b,
+                    facetInfos,
+                    innerEnv);
+                var facetInfo = facetInfos[facet];
+                foreach (var mli in facetInfo.MemberLines)
+                {
+                    var memberLineInfo = mli;
+                    var firstSpec = mli.FirstSpec;
+
+                    var memberRefs = (from p in memberLineInfo.MemberRefs
+                                      select p.Item2).ToArray();
+                    var first = memberRefs[0];
+
+                    var newMemberLineBuilder = new ResMemberLineDeclBuilder(
+                        LazyFactory,
+                        firstSpec.Name,
+                        firstSpec.OriginalLexicalID,
+                        firstSpec.Category);
+
+                    facet
+                        .GetMemberNameGroup(firstSpec.Name)
+                        .GetMemberCategoryGroup(firstSpec.Category)
+                        .AddLine(newMemberLineBuilder);
+
+                    var inheritedDecls = (from mr in memberRefs
+                                          select ResMemberDecl.CreateInheritedDecl(
+                                            this,
+                                            thisPipelineBuilder,
+                                            newMemberLineBuilder,
+                                            mr.Range,
+                                            mr)).Eager();
+
+                    foreach (var mr in memberRefs)
+                    {
+                        newMemberLineBuilder.AddTags(mr.Tags);
                     }
 
-                    baseIndex++;
+                    newMemberLineBuilder.MemberDeclMode = ResMemberDeclMode.Inherited;
+                    newMemberLineBuilder.ConcretenessMode = (from mr in memberRefs
+                                                             select mr.Decl.Line.ConcretenessMode).Max();
+
+
+                    newMemberLineBuilder.InheritedDecls = inheritedDecls;
+
+                    //                        facet.AddMemberLine(newMemberLine);
+
+                    /*
+                    // Need to determine if new declaration
+                    // should be abstract/virtual/final.
+                    newDecl.MemberDeclMode = ResMemberDeclMode.Inherited;
+                    newDecl.ConcretenessMode = (from mr in memberRefs
+                                                select mr.Decl.ConcretenessMode).Max();
+                    facet.AddMember( newDecl );
+                     */
                 }
-
-                var baseLinearization = Linearize(
-                    (from b in bases
-                    select (from f in b.Facets
-                            select f.OriginalPipeline).ToArray()).ToArray());
-
-                Func<IResMemberDecl, SourceRange, IResTerm> pipelineMakeRef = (m, r) =>
-                    (new ResMemberSpec(r, resPipeline.ThisPipeline, m)).Bind( r,
-                        new ResVarRef(r, resPipeline.ThisParameter));
-
-                // First, create derived-class facets for each of the base classes,
-                // using the linearization we computed above. This will ensure
-                // that our facets are in an appropriate order (most- to least-derived)
-                foreach( var b in baseLinearization )
-                {
-                    var facet = resPipeline.FindOrCreateFacetForBase(b);
-                }
-
-                // Now that we've done that step, we can safely create direct
-                // inheritance links from our direct facet to the associated
-                // base facets that were listed in the declaration:
-                foreach (var b in bases)
-                {
-                    var derivedFacet = FindOrCreateFacetForBase(
-                        resPipeline,
-                        b,
-                        facetInfos,
-                        innerEnv);
-                    directFacet.AddDirectBase(derivedFacet);
-                }
+                facet.DoneBuilding();
+            }
 
 
-                // Next, populate the list of members for each facet, by
-                // going through the linearized bases again
-                //
-                // We proceed in linearized order (from
-                // "most derived" to "most base"), so that
-                // the resulting list will have the most-derived
-                // declaration of the member at the front of the list.
-                foreach (var b in baseLinearization)
-                {
-                    PopulateMembersForBase(
-                        resPipeline,
-                        b,
-                        facetInfos,
-                        innerEnv);
-                }
+            Func<IResMemberDecl, SourceRange, IResTerm> makeRef = (m, r) =>
+                (new ResMemberSpec(r, thisPipeline, m)).Bind(r,
+                    new ResVarRef(r, thisParameter));
 
-                foreach (var b in baseLinearization)
-                {
-                    var facet = FindOrCreateFacetForBase(
-                        resPipeline,
-                        b,
-                        facetInfos,
-                        innerEnv);
-                    var facetInfo = facetInfos[facet];
-                    foreach( var mli in facetInfo.MemberLines )
-                    {
-                        var memberLineInfo = mli;
-                        var firstSpec = mli.FirstSpec;
-
-                        var memberRefs = (from p in memberLineInfo.MemberRefs
-                                          select p.Item2).ToArray();
-                        var first = memberRefs[0];
-
-                        var newMemberLineBuilder = new ResMemberLineDeclBuilder(
-                            LazyFactory,
-                            firstSpec.Name,
-                            firstSpec.OriginalLexicalID,
-                            firstSpec.Category);
-                        var newMemberLine = newMemberLineBuilder.Value;
-
-                        facet
-                            .GetMemberNameGroup(firstSpec.Name)
-                            .GetMemberCategoryGroup(firstSpec.Category)
-                            .AddLine(newMemberLineBuilder);
-
-                        var inheritedDecls = (from mr in memberRefs
-                                              select ResMemberDecl.CreateInheritedDecl(
-                                                this,
-                                                thisPipeline,
-                                                newMemberLine,
-                                                newMemberLineBuilder,
-                                                mr.Range,
-                                                mr)).Eager();
-                        foreach (var id in inheritedDecls)
-                        {
-                            id.DoneBuilding();
-                        }
-
-                        foreach(var mr in memberRefs)
-                        {
-                            newMemberLineBuilder.AddTags(mr.Tags);
-                        }
-
-                        newMemberLineBuilder.MemberDeclMode = ResMemberDeclMode.Inherited;
-                        newMemberLineBuilder.ConcretenessMode = (from mr in memberRefs
-                                                                 select mr.Decl.Line.ConcretenessMode).Max();
-
-
-                        newMemberLineBuilder.InheritedDecls = inheritedDecls;
-
-//                        facet.AddMemberLine(newMemberLine);
-
-                        /*
-                        // Need to determine if new declaration
-                        // should be abstract/virtual/final.
-                        newDecl.MemberDeclMode = ResMemberDeclMode.Inherited;
-                        newDecl.ConcretenessMode = (from mr in memberRefs
-                                                    select mr.Decl.ConcretenessMode).Max();
-                        facet.AddMember( newDecl );
-                         */
-                    }
-                    facet.DoneBuilding();
-                }
-
-                Func<IResMemberDecl, SourceRange, IResTerm> makeRef = (m, r) =>
-                    (new ResMemberSpec(r, thisPipeline, m)).Bind(r,
-                        new ResVarRef(r, thisParameter));
-
-                // Now consider direct member decls
-                foreach (var absMemberDecl in absMembers)
-                {
-                    var declEnv = innerEnv.NestDiagnostics();
-                    ResolveMemberDecl(
-                        thisPipeline,
-                        absMemberDecl,
-                        declEnv,
-                        makeRef );
-                }
-
-                directFacet.DoneBuilding();
-            } );
-
-            resPipeline.AddPostAction(() =>
+            // Now consider direct member decls
+            foreach (var absMemberDecl in absMembers)
             {
-                // Non-abstract pipeline cannot contain abstract members.
-                if (resPipeline.ConcretenessMode != ResMemberConcretenessMode.Abstract)
+                var declEnv = innerEnv.NestDiagnostics();
+                ResolveMemberDecl(
+                    thisPipelineBuilder,
+                    absMemberDecl,
+                    declEnv,
+                    makeRef);
+            }
+
+            directFacet.DoneBuilding();
+
+            // Add some checks that should be done after the pipeline has been fully resolved:
+            LazyFactory.New(() =>
+            {
+                var resShaderClass = resShaderClassBuilder.Value;
+
+                // Non-abstract class cannot contain abstract members.
+                if (resShaderClass.ConcretenessMode != ResMemberConcretenessMode.Abstract)
                 {
-                    foreach (var ml in resPipeline.MemberLines)
+                    foreach (var member in resShaderClass.Members)
                     {
-                        if (ml.ConcretenessMode == ResMemberConcretenessMode.Abstract)
+                        if (member.Line.ConcretenessMode == ResMemberConcretenessMode.Abstract)
                         {
-                            AbstractMemberError(resPipeline, ml, env);
+                            AbstractMemberError(resShaderClass, member.Line, env);
                         }
                     }
                 }
 
                 // Find the first 'primary' class in the inheritance
                 // chain (other than the direct class...).
-                var primaryBase = (from f in resPipeline.Facets
-                                   where f != resPipeline.DirectFacet
+                var primaryBase = (from f in resShaderClass.Facets
+                                   where f != resShaderClass.DirectFacet
                                    where f.OriginalPipeline.MixinMode == ResMixinMode.Primary
                                    select f.OriginalPipeline).FirstOrDefault();
 
@@ -439,9 +467,9 @@ namespace Spark.Resolve
                 // all the other primary bases are super-classes of it.
                 if (primaryBase != null)
                 {
-                    foreach (var f in resPipeline.Facets)
+                    foreach (var f in resShaderClass.Facets)
                     {
-                        if (f == resPipeline.DirectFacet)
+                        if (f == resShaderClass.DirectFacet)
                             continue;
 
                         if (f.OriginalPipeline.MixinMode != ResMixinMode.Primary)
@@ -466,6 +494,26 @@ namespace Spark.Resolve
 
                     }
                 }
+
+                return 0;
+            });
+        }
+
+#if FOOBARBAZ
+
+
+
+
+
+
+
+
+
+            } );
+
+            resPipeline.AddPostAction(() =>
+            {
+
             });
 
 
@@ -473,6 +521,7 @@ namespace Spark.Resolve
 
             resModule.AddDecl(resPipeline);
         }
+#endif
 
         // Create a linearized list of superclasses (direct and direct),
         // based on the superclass linearizations of the declared direct
@@ -544,10 +593,10 @@ namespace Spark.Resolve
         }
 
 
-        private ResFacetDecl FindOrCreateFacetForBase(
-            ResPipelineDecl derivedPipelineDecl,
+        private ResFacetDeclBuilder FindOrCreateFacetForBase(
+            ResPipelineDeclBuilder derivedPipelineDecl,
             IResPipelineRef basePipelineRef,
-            IDictionary<IResFacetDecl, FacetInfo> facetInfos,
+            IDictionary<ResFacetDeclBuilder, FacetInfo> facetInfos,
             ResEnv env)
         {
             var derivedFacetDecl = derivedPipelineDecl.FindOrCreateFacetForBase(basePipelineRef);
@@ -588,9 +637,9 @@ namespace Spark.Resolve
         }
 
         private void PopulateFacetsForBase(
-            ResPipelineDecl derivedPipelineDecl,
+            ResPipelineDeclBuilder derivedPipelineDecl,
             IResPipelineRef basePipelineRef,
-            IDictionary<IResFacetDecl, FacetInfo> facetInfos,
+            IDictionary<ResFacetDeclBuilder, FacetInfo> facetInfos,
             ResEnv env)
         {
             var baseDirectFacetRef = basePipelineRef.DirectFacet;
@@ -611,9 +660,9 @@ namespace Spark.Resolve
         }
 
         private void PopulateMembersForBase(
-            ResPipelineDecl derivedPipelineDecl,
+            ResPipelineDeclBuilder derivedPipelineDecl,
             IResPipelineRef basePipelineRef,
-            IDictionary<IResFacetDecl, FacetInfo> facetInfos,
+            IDictionary<ResFacetDeclBuilder, FacetInfo> facetInfos,
             ResEnv env)
         {
             foreach (var baseFacetRef in basePipelineRef.Facets)
@@ -684,6 +733,38 @@ namespace Spark.Resolve
             ResEnv env,
             Func<IResMemberDecl, SourceRange, IResTerm> makeRef )
         {
+            // There are really two cases here: members marked
+            // as overriding an existing declaration, and new
+            // members.
+//            if (absMemberDecl.HasModifier(AbsModifiers.Override))
+            {
+                // We need to find a compatible declaration to override.
+                
+//                throw new NotImplementedException();
+            }
+//            else
+            {
+                // We know that this is a new declaration
+                // (although we may have to warn if there *was*
+                // a compatible inherited declaration and they
+                // didn't specify the 'new' keyword).
+
+                var name = absMemberDecl.Name;
+                var memberNameGroup = resContainer.ContainerDecl.DirectFacetBuilder.GetMemberNameGroup(name);
+                var category = GetMemberCategory(resContainer.ContainerDecl, absMemberDecl);
+                var memberCategoryGroup = memberNameGroup.GetMemberCategoryGroup(category);
+
+                memberCategoryGroup.AddAction(() =>
+                {
+                    ResolveMemberDecl(
+                        resContainer,
+                        memberCategoryGroup,
+                        absMemberDecl,
+                        env.NestDiagnostics());
+                });
+            }
+
+#if FOOBARBAZ
             var name = absMemberDecl.Name;
             var memberNameGroup = resContainer.ContainerDecl.DirectFacetBuilder.GetMemberNameGroup(name);
             var category = GetMemberCategory(resContainer.ContainerDecl, absMemberDecl);
@@ -697,6 +778,7 @@ namespace Spark.Resolve
                     absMemberDecl,
                     env.NestDiagnostics());
             });
+#endif
 
             /*
 
@@ -772,7 +854,7 @@ namespace Spark.Resolve
 
         public void ResolveMemberDecl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroup resGroup,
+            ResMemberCategoryGroupBuilder resGroup,
             AbsMemberDecl absMemberDecl,
             ResEnv env )
         {
@@ -794,71 +876,64 @@ namespace Spark.Resolve
         }
 
         private ResMemberCategory GetMemberCategoryImpl(
-            IBuilder parent,
+            IResContainerBuilder parent,
             AbsStructDecl absMember )
         {
             return new ResStructCategory();
         }
 
         private ResMemberCategory GetMemberCategoryImpl(
-            ResPipelineDecl parent,
+            ResPipelineDeclBuilder parent,
             AbsSlotDecl absMember)
         {
             return new ResAttributeCategory();
         }
 
         private ResMemberCategory GetMemberCategoryImpl(
-            ResStructDecl parent,
+            ResStructDeclBuilder parent,
             AbsSlotDecl absMember)
         {
             return new ResFieldCategory();
         }
 
         private ResMemberCategory GetMemberCategoryImpl(
-            IBuilder parent,
+            IResContainerBuilder parent,
             AbsMethodDecl absMember)
         {
             return new ResMethodCategory();
         }
 
         private ResMemberCategory GetMemberCategoryImpl(
-            IBuilder parent,
+            IResContainerBuilder parent,
             AbsElementDecl absMember)
         {
             return new ResElementCategory();
         }
 
         private ResMemberCategory GetMemberCategoryImpl(
-            IBuilder parent,
+            IResContainerBuilder parent,
             AbsTypeSlotDecl absMember)
         {
             return new ResTypeSlotCategory();
         }
 
         private ResMemberCategory GetMemberCategoryImpl(
-            IBuilder parent,
+            IResContainerBuilder parent,
             AbsConceptDecl absMember)
         {
             return new ResConceptClassCategory();
         }
 
-        /*
-        private ResMemberCategory GetMemberCategoryImpl(
-            IResContainerBuilder parent,
-            AbsGenericDecl absMember)
-        {
-            return GetMemberCategory(
-                parent,
-                absMember.Inner);
-        }*/
-
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroup resGroup,
+            ResMemberCategoryGroupBuilder resGroup,
             ResMemberCategory category,
             AbsElementDecl absElementDecl,
             ResEnv env)
         {
+            // \todo: Assert that element decl can't be 'override'
+            // \todo: Check that element decl doesn't need 'new'
+
             // Ignore it all
             var line = CreateDirectLine(
                 resContainer,
@@ -867,11 +942,10 @@ namespace Spark.Resolve
                 env);
 
             var resElement = new ResElementDecl(
-                line.Value,
-                null,
+                line,
                 absElementDecl.Range,
                 absElementDecl.Name);
-            resElement.DoneBuilding();
+
             line.DirectDecl = resElement;
         }
 
@@ -887,20 +961,17 @@ namespace Spark.Resolve
 
 
         private IResGenericParamDecl ResolveGenericParam(
-            IBuilder parentBuilder,
             AbsGenericParamDecl absParam,
             ResEnv env,
             ResLocalScope insertScope)
         {
             return ResolveGenericParamImpl(
-                parentBuilder,
                 (dynamic)absParam,
                 env,
                 insertScope);
         }
 
         private IResGenericParamDecl ResolveGenericParamImpl(
-            IBuilder parentBuilder,
             AbsGenericTypeParamDecl absParam,
             ResEnv env,
             ResLocalScope insertScope)
@@ -916,7 +987,6 @@ namespace Spark.Resolve
         }
 
         private IResGenericParamDecl ResolveGenericParamImpl(
-            IBuilder parentBuilder,
             AbsGenericValueParamDecl absParam,
             ResEnv env,
             ResLocalScope insertScope)
@@ -928,7 +998,7 @@ namespace Spark.Resolve
             var resParam = new ResVarDecl(
                 absParam.Range,
                 absParam.Name,
-                parentBuilder.NewLazy(() =>
+                LazyFactory.New(() =>
                 {
                     var resTerm = ResolveTerm(
                         absParam.Type,
@@ -947,7 +1017,7 @@ namespace Spark.Resolve
 
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroup resGroup,
+            ResMemberCategoryGroupBuilder resGroup,
             ResAttributeCategory category,
             AbsSlotDecl absAttributeDecl,
             ResEnv env)
@@ -970,90 +1040,59 @@ namespace Spark.Resolve
 
             var prevDecl = (ResAttributeDecl)resMemberLineBuilder.EffectiveDecl;
 
-            var resAttribute = new ResAttributeDecl(
-                resMemberLineBuilder.Value,
-                null,
-                absAttributeDecl.Range,
-                absAttributeDecl.Name);
-            resMemberLineBuilder.DirectDecl = resAttribute;
+            bool isInput = absAttributeDecl.HasModifier(AbsModifiers.Input);
+            bool isOutput = absAttributeDecl.HasModifier(AbsModifiers.Output);
+            bool isOptional = absAttributeDecl.HasModifier(AbsModifiers.Optional);
 
-            bool isInput = absAttributeDecl.HasModifier( AbsModifiers.Input );
-            bool isOutput = absAttributeDecl.HasModifier( AbsModifiers.Output );
-            bool isOptional = absAttributeDecl.HasModifier( AbsModifiers.Optional );
-
-            if( prevDecl != null )
+            if (prevDecl != null)
             {
-                if( prevDecl.IsInput )
+                if (prevDecl.IsInput())
                 {
                     env.Error(
                         absAttributeDecl.Range,
-                        "Cannot override 'input' attribute" );
+                        "Cannot override 'input' attribute");
                     isInput = true;
                 }
 
-                if( prevDecl.IsOutput )
+                if (prevDecl.IsOutput())
                 {
                     isOutput = true;
                 }
 
-                if( isOptional && !prevDecl.IsOptional )
+                if (isOptional && !prevDecl.IsOptional())
                 {
                     env.Error(
                         absAttributeDecl.Range,
-                        "Cannot make non-optional attribute optional." );
+                        "Cannot make non-optional attribute optional.");
                 }
 
-                if( prevDecl.IsOptional )
+                if (prevDecl.IsOptional())
                 {
                     isOptional = true;
                 }
             }
 
-            if( isInput )
-                resAttribute.IsInput = true;
-            if( isOutput )
-                resAttribute.IsOutput = true;
-            if( isOptional )
-                resAttribute.IsOptional = true;
-
-            resAttribute.AddBuildAction(() =>
+            var resAttribute = ResAttributeDecl.Build(
+                LazyFactory,
+                resMemberLineBuilder,
+                absAttributeDecl.Range,
+                absAttributeDecl.Name,
+                (builder) =>
             {
-                resAttribute.Type = resType;
-                /*
-                if (absAttributeDecl.Type != null)
-                {
-                    var type = (IResFreqQualType) Coerce(
-                        ResolveTerm(absAttributeDecl.Type, env),
-                        ResKind.FreqQualType,
-                        env);
+                if (isInput)
+                    builder.Flags |= ResAttributeFlags.Input;
+                if (isOutput)
+                    builder.Flags |= ResAttributeFlags.Output;
+                if (isOptional)
+                    builder.Flags |= ResAttributeFlags.Optional;
 
-                    if (resAttribute.MemberDeclMode != ResMemberDeclMode.Direct)
-                    {
-                        if (!IsSameType(type, resAttribute.Type_Build))
-                        {
-                            env.Error(
-                                absAttributeDecl.Range,
-                                "Attribute {0} re-declared with different type from inherited definition",
-                                absAttributeDecl.Name);
-                        }
-                    }
+                builder.Type = resType;
 
-                    resAttribute.Type = type;
-                }
-                else if( resAttribute.MemberDeclMode == ResMemberDeclMode.Direct )
-                {
-                    env.Error(
-                        absAttributeDecl.Range,
-                        "Attribute {0} must be given a type",
-                        absAttributeDecl.Name);
-                    resAttribute.Type = ResErrorTerm.Instance;
-                }
+                var resLine = resMemberLineBuilder.Value;
 
-                var attrType = resAttribute.Type_Build;
-                */
                 if( absAttributeDecl.Init != null )
                 {
-                    if( resAttribute.Line.ConcretenessMode == ResMemberConcretenessMode.Abstract )
+                    if (resLine.ConcretenessMode == ResMemberConcretenessMode.Abstract)
                     {
                         env.Error(
                             absAttributeDecl.Range,
@@ -1067,22 +1106,22 @@ namespace Spark.Resolve
                     }
 
                     var initEnv = env.NestDiagnostics().NestBaseAttributeType(resType);
-                    var initBuilder = initEnv.Lazy(() =>
+                    var lazyInit = initEnv.Lazy(() =>
                     {
                         var initTerm = ResolveTerm(absAttributeDecl.Init, initEnv);
                         var init = Coerce(initTerm, resType, initEnv);
                         return init;
                     } );
 
-                    resAttribute.InitBuilder = initBuilder;
+                    builder.LazyInit = lazyInit;
                 }
                 else
                 {
-                    if( resAttribute.Line.ConcretenessMode != ResMemberConcretenessMode.Abstract )
+                    if (resLine.ConcretenessMode != ResMemberConcretenessMode.Abstract)
                     {
                         if( !isInput && !isOptional )
                         {
-                            if( !resAttribute.Line.Tags.Any( ( tag ) => tag is ResBuiltinTag ) )
+                            if (!resLine.Tags.Any((tag) => tag is ResBuiltinTag))
                             {
                                 env.Error(
                                     absAttributeDecl.Range,
@@ -1091,13 +1130,14 @@ namespace Spark.Resolve
                         }
                     }
                 }
+
             });
-            resAttribute.DoneBuilding();
+            resMemberLineBuilder.DirectDecl = resAttribute;
         }
 
         private ResMemberLineDeclBuilder FindOrCreateAttributeLine(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroup resGroup,
+            ResMemberCategoryGroupBuilder resGroup,
             AbsSlotDecl absAttribute,
             ref IResFreqQualType resType,
             ResEnv env)
@@ -1113,7 +1153,7 @@ namespace Spark.Resolve
                                   where mng != null
                                   let mcg = mng.GetMemberCategoryGroup(resGroup.Category)
                                   where mcg != null
-                                  from ml in mcg.Lines_Build
+                                  from ml in mcg.Lines
                                   let decl = ml.EffectiveDecl
                                   where IsAttributeOverloadMatch(
                                     ml,
@@ -1249,39 +1289,37 @@ namespace Spark.Resolve
 
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroup resGroup,
+            ResMemberCategoryGroupBuilder resGroup,
             ResFieldCategory category,
             AbsSlotDecl absFieldDecl,
             ResEnv env)
         {
-            var resLine = CreateDirectLine(
+            var resLineBuilder = CreateDirectLine(
                 resContainer,
                 resGroup,
                 absFieldDecl,
                 env);
 
-            var resField = new ResFieldDecl(
-                resLine.Value,
-                null,
+            var resField = ResFieldDecl.Build(
+                LazyFactory,
+                resLineBuilder,
                 absFieldDecl.Range,
-                absFieldDecl.Name);
-            resLine.DirectDecl = resField;
-
-            resField.AddBuildAction(() =>
+                absFieldDecl.Name,
+                (builder) =>
             {
                 var type = ResolveTypeExp(absFieldDecl.Type, env);
                 var initTerm = ResolveTerm(absFieldDecl.Init, env);
                 var init = CoerceUnqualified(initTerm, type, env);
 
-                resField.Init = init;
-                resField.Type = type;
+                builder.Init = init;
+                builder.Type = type;
             });
-            resField.DoneBuilding();
+            resLineBuilder.DirectDecl = resField;
         }
 
         public void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroup resGroup,
+            ResMemberCategoryGroupBuilder resGroup,
             ResMethodCategory category,
             AbsMethodDecl absMethodDecl,
             ResEnv env)
@@ -1293,7 +1331,7 @@ namespace Spark.Resolve
             if (absMethodDecl.GenericParams != null)
             {
                 resGenericParams = (from p in absMethodDecl.GenericParams
-                                    select ResolveGenericParam(resGroup, p, genericParamEnv, genericParamScope)).Eager();
+                                    select ResolveGenericParam(p, genericParamEnv, genericParamScope)).Eager();
             }
             if (resGenericParams != null)
             {
@@ -1343,10 +1381,9 @@ namespace Spark.Resolve
             var paramEnv = genericParamEnv.NestScope(paramScope);
 
             var resParams = (from absParam in absMethodDecl.parameters
-                             select ResolveParamDecl(resGroup, absParam, paramScope, paramEnv)).Eager();
+                             select ResolveParamDecl(absParam, paramScope, paramEnv)).Eager();
 
-
-            var memberLine = FindOrCreateMethod(
+            var resLineBuilder = FindOrCreateMethod(
                 resContainer,
                 resGroup,
                 absMethodDecl,
@@ -1354,53 +1391,37 @@ namespace Spark.Resolve
                 resGenericParams,
                 env);
 
-            var resMethod = new ResMethodDecl(
-                memberLine.Value,
-                null,
+
+            var resMethod = ResMethodDecl.Build(
+                LazyFactory,
+                resLineBuilder,
                 absMethodDecl.Range,
-                absMethodDecl.Name);
-
-            ResMemberDecl decl = resMethod;
-            if (resGenericParams != null)
+                absMethodDecl.Name,
+                (builder) =>
             {
-                var resGeneric = new ResGenericDecl(
-                    memberLine.Value,
-                    null,
-                    absMethodDecl.Range,
-                    absMethodDecl.Name);
+                var resLine = resLineBuilder.Value;
 
-                resGeneric.Parameters = resGenericParams;
-                resGeneric.InnerDecl = resMethod;
-                resGeneric.DoneBuilding();
-
-                decl = resGeneric;
-            }
-
-            memberLine.DirectDecl = decl;
-
-            IResElementRef implicitFreq = null;
-            resMethod.AddBuildAction(() =>
-            {
                 var tags = (from absTag in absMethodDecl.Attributes
                             let tag = ResolveTag(absTag, env)
                             where tag != null
                             select tag).Eager();
-                memberLine.AddTags(tags);
+                resLineBuilder.AddTags(tags);
 
-                resMethod.Parameters = resParams;
+                builder.Parameters = resParams;
 
                 var resultType = ResolveTypeExp(absMethodDecl.resultType, paramEnv);
-                resMethod.ResultType = resultType;
+                builder.ResultType = resultType;
 
+                IResElementRef implicitFreq = null;
                 if (resultType is ResFreqQualType)
                 {
-                    var resultFQType = (ResFreqQualType) resultType;
+                    var resultFQType = (ResFreqQualType)resultType;
                     var resultFreq = resultFQType.Freq;
 
                     // All parameters must have frequencies...
-                    foreach( var p in resParams )
+                    foreach (var p in resParams)
                     {
-                        if( !(p.Type is ResFreqQualType) )
+                        if (!(p.Type is ResFreqQualType))
                         {
                             env.Error(
                                 p.Range,
@@ -1416,11 +1437,11 @@ namespace Spark.Resolve
                             resultFreq)))
                     {
                         implicitFreq = resultFreq;
-                        resMethod.Flavor = ResMethodFlavor.SingleFreq;
+                        builder.Flavor = ResMethodFlavor.SingleFreq;
                     }
                     else
                     {
-                        resMethod.Flavor = ResMethodFlavor.Conversion;
+                        builder.Flavor = ResMethodFlavor.Conversion;
                     }
                 }
                 else
@@ -1436,35 +1457,15 @@ namespace Spark.Resolve
                         }
                     }
 
-                    resMethod.Flavor = ResMethodFlavor.Ordinary;
+                    builder.Flavor = ResMethodFlavor.Ordinary;
                 }
-            });
-            resMethod.AddPostAction(() =>
-            {
-                var resultType = resMethod.ResultType;
-                if (absMethodDecl.body != null)
-                {
-                    var absBody = absMethodDecl.body;
-                    var bodyEnv = paramEnv.NestImplicitFreq(implicitFreq);
-                    var returnTarget = new ResLabel(
-                        absBody.Range,
-                        _identifiers.unique("return"),
-                        resultType);
-                    var stmtContext = new StmtContext {
-                        ReturnTarget = returnTarget,
-                        ImplicitFreq = implicitFreq, };
-                    var body = ResolveStmt(absMethodDecl.body, bodyEnv, stmtContext);
 
-                    resMethod.Body = new ResLabelExp(
-                        absBody.Range,
-                        returnTarget,
-                        body);
-                }
-                else
+                // Now deal with the method body
+                if (absMethodDecl.body == null)
                 {
-                    if (memberLine.ConcretenessMode != ResMemberConcretenessMode.Abstract)
+                    if (resLine.ConcretenessMode != ResMemberConcretenessMode.Abstract)
                     {
-                        if (!memberLine.Value.Tags.Any((tag) => tag is ResBuiltinTag))
+                        if (!resLine.Tags.Any((tag) => tag is ResBuiltinTag))
                         {
                             env.Error(
                                 absMethodDecl.Range,
@@ -1473,9 +1474,53 @@ namespace Spark.Resolve
                         }
                     }
                 }
+                else
+                {
+                    var absBody = absMethodDecl.body;
+                    var bodyEnv = paramEnv.NestImplicitFreq(implicitFreq);
 
+                    var resLazyBody = LazyFactory.New(() =>
+                    {
+                        var returnTarget = new ResLabel(
+                            absBody.Range,
+                            _identifiers.unique("return"),
+                            resultType);
+                        var stmtContext = new StmtContext
+                        {
+                            ReturnTarget = returnTarget,
+                            ImplicitFreq = implicitFreq,
+                        };
+                        var bodyStmt = ResolveStmt(absMethodDecl.body, bodyEnv, stmtContext);
+
+                        var resBody = new ResLabelExp(
+                            absBody.Range,
+                            returnTarget,
+                            bodyStmt);
+
+                        return resBody;
+                    });
+
+                    builder.LazyBody = resLazyBody;
+                }
             });
-            resMethod.DoneBuilding();
+
+            IResMemberDecl decl = resMethod;
+            if (resGenericParams != null)
+            {
+                var resGeneric = ResGenericDecl.Build(
+                    LazyFactory,
+                    resLineBuilder,
+                    absMethodDecl.Range,
+                    absMethodDecl.Name,
+                    (builder) =>
+                {
+                    builder.Parameters = resGenericParams;
+                    builder.InnerDecl = resMethod;
+                });
+
+                decl = resGeneric;
+            }
+            resLineBuilder.DirectDecl = decl;
         }
 
         /*
@@ -1508,7 +1553,7 @@ namespace Spark.Resolve
 
         private ResMemberLineDeclBuilder FindOrCreateMethod(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroup resGroup,
+            ResMemberCategoryGroupBuilder resGroup,
             AbsMethodDecl absMethodDecl,
             IResVarDecl[] resParams,
             IResGenericParamDecl[] resGenericParams,
@@ -1523,7 +1568,7 @@ namespace Spark.Resolve
                                   where mng != null
                                   let mcg = mng.GetMemberCategoryGroup(resGroup.Category)
                                   where mcg != null
-                                  from ml in mcg.Lines_Build
+                                  from ml in mcg.Lines
                                   let decl = ml.EffectiveDecl
                                   where IsMethodOverloadMatch(
                                             ml,
@@ -1571,7 +1616,7 @@ namespace Spark.Resolve
 
         private ResMemberLineDeclBuilder CreateDirectLine(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroup resGroup,
+            ResMemberCategoryGroupBuilder resGroup,
             AbsMemberDecl absMemberDecl,
             ResEnv env)
         {
@@ -1753,55 +1798,55 @@ namespace Spark.Resolve
 
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroup resGroup,
+            ResMemberCategoryGroupBuilder resGroup,
             ResStructCategory category,
             AbsStructDecl absStruct,
             ResEnv env)
         {
-            var resLine = CreateDirectLine(
+            var resLineBuilder = CreateDirectLine(
                 resContainer,
                 resGroup,
                 absStruct,
                 env);
 
-            var resStruct = new ResStructDecl(
-                resLine.Value,
-                null,
+            var resStruct = ResStructDecl.Build(
+                LazyFactory,
+                resLineBuilder,
                 absStruct.Range,
-                absStruct.Name);
-            resLine.DirectDecl = resStruct;
-
-            resStruct.AddBuildAction(() =>
+                absStruct.Name,
+                (builder) =>
             {
-                var thisStruct = (IResStructRef) resContainer.CreateMemberRef(
+                ResStructBuilderRef thisStructBuilder = new ResStructBuilderRef(
+                    builder );
+
+                var thisStruct = (IResStructRef)resContainer.CreateMemberRef(
                     absStruct.Range,
-                    resStruct);
+                    builder.Value);
 
                 var thisParameter = new ResVarDecl(
                     absStruct.Range,
                     _identifiers.simpleIdentifier("this"),
                     thisStruct);
 
-                resStruct.ThisStruct = thisStruct;
-                resStruct.ThisParameter = thisParameter;
-                
+                builder.ThisStruct = thisStruct;
+                builder.ThisParameter = thisParameter;
+
                 var memberEnv = env;
                 foreach (var absMember in absStruct.Members)
                 {
                     ResolveMemberDecl(
-                        (IResContainerBuilderRef) thisStruct,
+                        thisStructBuilder,
                         absMember,
                         memberEnv,
                         makeRef: null);
                 }
-
             });
-            resStruct.DoneBuilding();
+            resLineBuilder.DirectDecl = resStruct;
         }
 
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroup resGroup,
+            ResMemberCategoryGroupBuilder resGroup,
             ResTypeSlotCategory category,
             AbsTypeSlotDecl absTypeDecl,
             ResEnv env)
@@ -1809,60 +1854,52 @@ namespace Spark.Resolve
             // No overriding/overloading allowed...
             // Need to ensure this... :(
 
-            var resMemberLine = CreateDirectLine(
+            var resLineBuilder = CreateDirectLine(
                 resContainer,
                 resGroup,
                 absTypeDecl,
                 env);
 
+            var resTypeDecl = new ResTypeSlotDecl(
+                resLineBuilder,
+                absTypeDecl.Range,
+                absTypeDecl.Name);
+
+            var tags = (from absTag in absTypeDecl.Attributes
+                        let tag = ResolveTag(absTag, env)
+                        where tag != null
+                        select tag).Eager();
+            resLineBuilder.AddTags(tags);
+
             var resGenericParamScope = new ResLocalScope();
             var resGenericParamEnv = env.NestScope(resGenericParamScope);
 
-            ResGenericDecl resGeneric = null;
+            IResMemberDecl decl = resTypeDecl;
             if (absTypeDecl.GenericParams != null)
             {
                 var resGenericParams = (from p in absTypeDecl.GenericParams
-                                        select ResolveGenericParam(resGroup, p, resGenericParamEnv, resGenericParamScope)).Eager();
-                resGeneric = new ResGenericDecl(
-                    resMemberLine.Value,
-                    null,
+                                        select ResolveGenericParam(p, resGenericParamEnv, resGenericParamScope)).Eager();
+
+                var resGeneric = ResGenericDecl.Build(
+                    LazyFactory,
+                    resLineBuilder,
                     absTypeDecl.Range,
-                    absTypeDecl.Name);
-                resGeneric.Parameters = resGenericParams;
-            }
+                    absTypeDecl.Name,
+                    (builder) =>
+                {
+                    builder.Parameters = resGenericParams;
+                    builder.InnerDecl = resTypeDecl;
+                });
 
-            var resTypeDecl = new ResTypeSlotDecl(
-                resMemberLine.Value,
-                null,
-                absTypeDecl.Range,
-                absTypeDecl.Name);
-            resTypeDecl.AddBuildAction(() =>
-            {
-                var tags = (from absTag in absTypeDecl.Attributes
-                            let tag = ResolveTag(absTag, env)
-                            where tag != null
-                            select tag).Eager();
-
-                resMemberLine.AddTags(tags);
-            });
-            resTypeDecl.DoneBuilding();
-
-            ResMemberDecl decl = resTypeDecl;
-
-            if (resGeneric != null)
-            {
-                resGeneric.InnerDecl = decl;
-                resGeneric.DoneBuilding();
                 decl = resGeneric;
             }
-            
-            resMemberLine.DirectDecl = decl;
 
+            resLineBuilder.DirectDecl = decl;
         }
 
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroup resGroup,
+            ResMemberCategoryGroupBuilder resGroup,
             ResConceptClassCategory category,
             AbsConceptDecl absDecl,
             ResEnv env)
@@ -1870,7 +1907,7 @@ namespace Spark.Resolve
             // No overriding/overloading allowed...
             // Need to ensure this... :(
 
-            var resMemberLine = CreateDirectLine(
+            var resLineBuilder = CreateDirectLine(
                 resContainer,
                 resGroup,
                 absDecl,
@@ -1879,38 +1916,28 @@ namespace Spark.Resolve
             var resGenericParamScope = new ResLocalScope();
             var resGenericParamEnv = env.NestScope(resGenericParamScope);
 
-            ResGenericDecl resGeneric = null;
-            if (absDecl.GenericParams != null)
-            {
-                var resGenericParams = (from p in absDecl.GenericParams
-                                        select ResolveGenericParam(resGroup, p, resGenericParamEnv, resGenericParamScope)).Eager();
-                resGeneric = new ResGenericDecl(
-                    resMemberLine.Value,
-                    null,
-                    absDecl.Range,
-                    absDecl.Name);
-                resGeneric.Parameters = resGenericParams;
-            }
-
-            var resDecl = new ResConceptClassDecl(
-                resMemberLine.Value,
-                null,
+            var resConceptClassDecl = ResConceptClassDecl.Build(
+                LazyFactory,
+                resLineBuilder,
                 absDecl.Range,
-                absDecl.Name);
-
-            resDecl.AddBuildAction(() =>
+                absDecl.Name,
+                (builder) =>
             {
+                var thisConceptClassBuilder = new ResConceptClassBuilderRef(
+                    absDecl.Range,
+                    builder);
+
                 var thisConceptClass = (IResConceptClassRef)resContainer.CreateMemberRef(
                     absDecl.Range,
-                    resDecl);
+                    builder.Value);
 
                 var thisParameter = new ResVarDecl(
                     absDecl.Range,
                     _identifiers.simpleIdentifier("this"),
                     thisConceptClass);
 
-                resDecl.ThisConceptClass = thisConceptClass;
-                resDecl.ThisParameter = thisParameter;
+                builder.ThisConceptClass = thisConceptClass;
+                builder.ThisParameter = thisParameter;
 
                 var innerEnv = resGenericParamEnv.NestScope(
                     new ResPipelineScope(thisConceptClass, thisParameter));
@@ -1919,26 +1946,34 @@ namespace Spark.Resolve
                 foreach (var absMember in absDecl.Members)
                 {
                     ResolveMemberDecl(
-                        (IResContainerBuilderRef)thisConceptClass,
+                        thisConceptClassBuilder,
                         absMember,
                         memberEnv,
                         makeRef: null);
                 }
-
             });
-            resDecl.DoneBuilding();
 
-            ResMemberDecl result = resDecl;
-
-            if (resGeneric != null)
+            IResMemberDecl resDecl = null;
+            if (absDecl.GenericParams != null)
             {
-                resGeneric.InnerDecl = result;
-                resGeneric.DoneBuilding();
-                result = resGeneric;
+                var resGenericParams = (from p in absDecl.GenericParams
+                                        select ResolveGenericParam(p, resGenericParamEnv, resGenericParamScope)).Eager();
+
+                var resGeneric = ResGenericDecl.Build(
+                    LazyFactory,
+                    resLineBuilder,
+                    absDecl.Range,
+                    absDecl.Name,
+                    (builder) =>
+                {
+                    builder.Parameters = resGenericParams;
+                    builder.InnerDecl = resConceptClassDecl;
+                });
+
+                resDecl = resGeneric;
             }
 
-            resMemberLine.DirectDecl = result;
-
+            resLineBuilder.DirectDecl = resDecl;
         }
 
         private ResTag ResolveTag(
@@ -1966,7 +2001,6 @@ namespace Spark.Resolve
         }
 
         private IResVarDecl ResolveParamDecl(
-            IBuilder parent,
             AbsParamDecl absParam,
             ResLocalScope insertScope,
             ResEnv env)
@@ -1974,7 +2008,7 @@ namespace Spark.Resolve
             var resParam = new ResVarDecl(
                 absParam.Range,
                 absParam.name,
-                parent.NewLazy(() => ResolveTypeExp(absParam.type, env)));
+                LazyFactory.New(() => ResolveTypeExp(absParam.type, env)));
 
             insertScope.Insert(absParam.name, (range) => new ResVarRef(range, resParam));
 
@@ -3067,12 +3101,12 @@ namespace Spark.Resolve
 
                     var attrDecl = (ResAttributeDecl)memberSpec.Decl;
 
-                    if( !attrDecl.IsInput )
+                    if( !attrDecl.IsInput() )
                         continue;
 
                     if (attrDecl.Line.ConcretenessMode == ResMemberConcretenessMode.Abstract)
                         continue;
-                    if (attrDecl.InitBuilder != null)
+                    if (attrDecl.Init != null)
                         continue;
 
                     var attrRef = (IResAttributeRef)memberSpec.Bind(

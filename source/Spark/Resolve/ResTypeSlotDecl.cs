@@ -24,11 +24,10 @@ namespace Spark.Resolve
     public class ResTypeSlotDecl : ResMemberDecl, IResTypeSlotDecl
     {
         public ResTypeSlotDecl(
-            IResMemberLineDecl line,
-            IBuilder parent,
+            ILazy<IResMemberLineDecl> line,
             SourceRange range,
             Identifier name )
-            : base(line, parent, range, name)
+            : base(line, range, name)
         {
         }
 
@@ -40,11 +39,10 @@ namespace Spark.Resolve
                 memberTerm);
         }
 
-        public override ResMemberDecl CreateInheritedDeclImpl(
+        public override IResMemberDecl CreateInheritedDeclImpl(
                     ResolveContext resContext,
                     IResContainerBuilderRef resContainer,
-                    IResMemberLineDecl resLine,
-                    IBuilder parent,
+                    ILazy<IResMemberLineDecl> resLine,
                     SourceRange range,
                     IResMemberRef memberRef)
         {
@@ -53,7 +51,6 @@ namespace Spark.Resolve
 
             var result = new ResTypeSlotDecl(
                 resLine,
-                parent,
                 range,
                 firstDecl.Name);
 

@@ -21,129 +21,22 @@ using Spark.ResolvedSyntax;
 
 namespace Spark.Resolve
 {
-    public class ResStructDecl : ResMemberDecl, IResStructDecl, IResContainerBuilder, IResContainerFacetBuilder
+    public class ResStructDeclBuilder : NewBuilder<IResStructDecl>, IResContainerBuilder, IResContainerFacetBuilder
     {
-        public ResStructDecl(
-            IResMemberLineDecl line,
-            IBuilder parent,
+        public ResStructDeclBuilder(
+            ILazyFactory lazyFactory,
+            ILazy<IResMemberLineDecl> line,
             SourceRange range,
-            Identifier name)
-            : base(line, parent, range, name)
+            Identifier name )
+            : base(lazyFactory)
         {
-        }
-
-        public override IResMemberRef MakeRef(SourceRange range, IResMemberTerm memberTerm)
-        {
-            return new ResStructRef(
+            var resStructDecl = new ResStructDecl(
+                line,
                 range,
-                this,
-                memberTerm);
-        }
-
-        public override ResMemberDecl CreateInheritedDeclImpl(
-                    ResolveContext resContext,
-                    IResContainerBuilderRef resContainer,
-                    IResMemberLineDecl resLine,
-                    IBuilder parent,
-                    SourceRange range,
-                    IResMemberRef originalRef)
-        {
-            var result = new ResStructDecl(
-                resLine,
-                parent,
-                range,
-                resLine.Name);
-
-            var firstRef = originalRef as IResStructRef;
-            var firstDecl = (IResStructDecl) firstRef.Decl;
-
-            result.AddBuildAction(() =>
-            {
-                var thisStruct = (IResStructRef) resContainer.CreateMemberRef(
-                    range,
-                    result);
-                var thisParameter = new ResVarDecl(
-                    range,
-                    firstDecl.ThisParameter.Name,
-                    thisStruct);
-
-                result.ThisStruct = thisStruct;
-                result.ThisParameter = thisParameter;
-
-                foreach (var ml in firstRef.MemberLines)
-                {
-                    var memberLine = ml; // Freaking C# variable capture!!!!
-
-
-
-                    var newMemberLineBuilder = new ResMemberLineDeclBuilder(
-                        parent,
-                        memberLine.Name,
-                        memberLine.OriginalLexicalID,
-                        memberLine.Category);
-
-                    result
-                        .GetMemberNameGroup(memberLine.Name)
-                        .GetMemberCategoryGroup(memberLine.Category)
-                        .AddLine(newMemberLineBuilder);
-
-                    newMemberLineBuilder.AddAction(() =>
-                    {
-                        var memberRef = memberLine.EffectiveSpec.Bind(
-                            range,
-                            new ResVarRef(range, thisParameter));
-
-                        var newMemberDecl = CreateInheritedDecl(
-                            resContext,
-                            (IResContainerBuilderRef) thisStruct,
-                            newMemberLineBuilder.Value,
-                            newMemberLineBuilder,
-                            range,
-                            memberRef );
-                        newMemberDecl.DoneBuilding();
-                        newMemberLineBuilder.DirectDecl = newMemberDecl;
-                    });
-
-                    result.AddDirectMemberLine(newMemberLineBuilder);
-                }
-            });
-
-            return result;
-        }
-
-        public IEnumerable<IResMemberDecl> Members
-        {
-            get
-            {
-                Force();
-                foreach (var mng in _memberNameGroups.Values)
-                    foreach (var mcg in mng.Categories)
-                        foreach (var ml in mcg.Lines)
-                            yield return ml.EffectiveDecl;
-            }
-        }
-
-        public IEnumerable<IResMemberLineDecl> MemberLines
-        {
-            get
-            {
-                Force();
-                foreach (var mng in _memberNameGroups.Values)
-                    foreach (var mcg in mng.Categories)
-                        foreach (var ml in mcg.Lines)
-                            yield return ml;
-            }
-        }
-
-        public IEnumerable<IResMemberDecl> LookupMembers(Identifier name)
-        {
-            Force();
-
-            foreach (var m in Members)
-            {
-                if (m.Name == name)
-                    yield return m;
-            }
+                name,
+                NewLazy(() => _thisParameter),
+                NewLazy(() => (from mngb in _memberNameGroups.Values select mngb.Value).Eager()));
+            SetValue(resStructDecl);
         }
 
         public IResContainerFacetBuilder DirectFacetBuilder
@@ -156,38 +49,32 @@ namespace Spark.Resolve
             get { return new IResContainerFacetBuilder[] { }; }
         }
 
-        public ResMemberNameGroup GetMemberNameGroup(Identifier name)
+        public ResMemberNameGroupBuilder GetMemberNameGroup(Identifier name)
         {
             return _memberNameGroups.Cache(name,
-                () => new ResMemberNameGroup(this, name));
-        }
-
-        public IResMemberNameGroup LookupMemberNameGroup(Identifier name)
-        {
-            Force();
-            return _memberNameGroups.Cache(name, () => null);
+                () => new ResMemberNameGroupBuilder(this.LazyFactory, this, name));
         }
 
         public IResVarDecl ThisParameter
         {
-            get { Force();  return _thisParameter; }
+            get { return _thisParameter; }
             set { AssertBuildable(); _thisParameter = value; }
         }
 
         public IResStructRef ThisStruct
         {
-            get { Force();  return _thisStruct; }
+            get { return _thisStruct; }
             set { AssertBuildable(); _thisStruct = value; }
         }
 
-        private Dictionary<Identifier, ResMemberNameGroup> _memberNameGroups = new Dictionary<Identifier, ResMemberNameGroup>();
+        private Dictionary<Identifier, ResMemberNameGroupBuilder> _memberNameGroups = new Dictionary<Identifier, ResMemberNameGroupBuilder>();
         private IResVarDecl _thisParameter;
         private IResStructRef _thisStruct;
 
-        public void AddDirectMemberLine( ResMemberLineDeclBuilder memberLine)
+        public void AddDirectMemberLine(ResMemberLineDeclBuilder memberLine)
         {
         }
-
+        /*
         public IResMemberLineDecl FindMember(IResMemberSpec memberSpec)
         {
             foreach (var ml in this.MemberLines)
@@ -198,9 +85,215 @@ namespace Spark.Resolve
 
             throw new KeyNotFoundException();
         }
+        public IEnumerable<ResMemberLineDeclBuilder> MemberLines
+        {
+            get
+            {
+                foreach (var mng in _memberNameGroups.Values)
+                    foreach (var mcg in mng.Categories)
+                        foreach (var ml in mcg.Lines)
+                            yield return ml;
+            }
+        }
+        */
+
+        IEnumerable<ResMemberNameGroupBuilder> IResContainerFacetBuilder.MemberNameGroups { get { throw new NotFiniteNumberException(); } }
     }
 
-    public class ResStructRef : ResMemberRef<ResStructDecl>, IResStructRef, IResContainerBuilderRef
+    public class ResStructDecl : ResMemberDecl, IResStructDecl
+    {
+        private ILazy<IResVarDecl> _thisParameter;
+        private ILazy<IEnumerable<IResMemberNameGroup>> _memberNameGroups;
+        private Dictionary<Identifier, IResMemberNameGroup> _cachedMemberNameGroups;
+
+        public ResStructDecl(
+            ILazy<IResMemberLineDecl> line,
+            SourceRange range,
+            Identifier name,
+            ILazy<IResVarDecl> thisParameter,
+            ILazy<IEnumerable<IResMemberNameGroup>> memberNameGroups)
+            : base(line, range, name)
+        {
+            _thisParameter = thisParameter;
+            _memberNameGroups = memberNameGroups;
+        }
+
+        public static IResStructDecl Build(
+            ILazyFactory lazyFactory,
+            ILazy<IResMemberLineDecl> line,
+            SourceRange range,
+            Identifier name,
+            Action<ResStructDeclBuilder> action )
+        {
+            var builder = new ResStructDeclBuilder(
+                lazyFactory,
+                line,
+                range,
+                name);
+            builder.AddAction(() => action(builder));
+            builder.DoneBuilding();
+            return builder.Value;
+        }
+
+        // ResMemberDecl
+
+        public override IResMemberRef MakeRef(SourceRange range, IResMemberTerm memberTerm)
+        {
+            return new ResStructRef(
+                range,
+                this,
+                memberTerm);
+        }
+
+        public override IResMemberDecl CreateInheritedDeclImpl(
+                    ResolveContext resContext,
+                    IResContainerBuilderRef resContainer,
+                    ILazy<IResMemberLineDecl> resLine,
+                    SourceRange range,
+                    IResMemberRef originalRef)
+        {
+            var firstRef = originalRef as IResStructRef;
+            var firstDecl = (IResStructDecl)firstRef.Decl;
+
+            var result = ResStructDecl.Build(
+                resContext.LazyFactory,
+                resLine,
+                range,
+                firstDecl.Name,
+                (builder) =>
+            {
+                var thisStructBuilder = new ResStructBuilderRef(builder);
+
+                var thisStruct = (IResStructRef) resContainer.CreateMemberRef(
+                    range,
+                    builder.Value);
+                var thisParameter = new ResVarDecl(
+                    range,
+                    firstDecl.ThisParameter.Name,
+                    thisStruct);
+
+                builder.ThisStruct = thisStruct;
+                builder.ThisParameter = thisParameter;
+
+                foreach (var ml in firstRef.MemberLines)
+                {
+                    var memberLine = ml; // Freaking C# variable capture!!!!
+
+                    var newMemberLineBuilder = new ResMemberLineDeclBuilder(
+                        builder.LazyFactory,
+                        memberLine.Name,
+                        memberLine.OriginalLexicalID,
+                        memberLine.Category);
+
+                    builder
+                        .GetMemberNameGroup(memberLine.Name)
+                        .GetMemberCategoryGroup(memberLine.Category)
+                        .AddLine(newMemberLineBuilder);
+
+                    newMemberLineBuilder.AddAction(() =>
+                    {
+                        var memberRef = memberLine.EffectiveSpec.Bind(
+                            range,
+                            new ResVarRef(range, thisParameter));
+
+                        var newMemberDecl = CreateInheritedDecl(
+                            resContext,
+                            thisStructBuilder,
+                            newMemberLineBuilder,
+                            range,
+                            memberRef );
+                        newMemberLineBuilder.DirectDecl = newMemberDecl;
+                    });
+
+                    builder.AddDirectMemberLine(newMemberLineBuilder);
+                }
+            });
+
+            return result;
+        }
+
+        // IResStructDecl
+
+        /*
+        public IEnumerable<IResMemberDecl> Members
+        {
+            get
+            {
+                foreach (var mng in _memberNameGroups.Value)
+                    foreach (var mcg in mng.Categories)
+                        foreach (var ml in mcg.Lines)
+                            yield return ml.EffectiveDecl;
+            }
+        }
+
+        public IEnumerable<IResMemberLineDecl> MemberLines
+        {
+            get
+            {
+                foreach (var mng in _memberNameGroups.Value)
+                    foreach (var mcg in mng.Categories)
+                        foreach (var ml in mcg.Lines)
+                            yield return ml;
+            }
+        }
+
+        public IEnumerable<IResMemberDecl> LookupMembers(Identifier name)
+        {
+            foreach (var m in Members)
+            {
+                if (m.Name == name)
+                    yield return m;
+            }
+        }
+        */
+
+        public IResVarDecl ThisParameter
+        {
+            get { return _thisParameter.Value; }
+        }
+
+        public IResMemberNameGroup LookupMemberNameGroup(Identifier name)
+        {
+            if (_cachedMemberNameGroups == null)
+            {
+                _cachedMemberNameGroups = new Dictionary<Identifier, IResMemberNameGroup>();
+                foreach (var memberNameGroup in _memberNameGroups.Value)
+                    _cachedMemberNameGroups.Add(memberNameGroup.Name, memberNameGroup);
+            }
+
+            return _cachedMemberNameGroups.Cache(name, () => null);
+        }
+
+        public IEnumerable<IResMemberNameGroup> MemberNameGroups { get { return _memberNameGroups.Value; } }
+    }
+
+    public class ResStructBuilderRef : IResContainerBuilderRef
+    {
+        private ResStructDeclBuilder _structDeclBuilder;
+
+        public ResStructBuilderRef(
+            ResStructDeclBuilder structDeclBuilder )
+        {
+            _structDeclBuilder = structDeclBuilder;
+        }
+
+        public IResContainerBuilder ContainerDecl
+        {
+            get { return _structDeclBuilder; }
+        }
+
+        IResMemberRef IResContainerBuilderRef.CreateMemberRef(SourceRange range, IResMemberDecl memberDecl)
+        {
+            return memberDecl.MakeRef(
+                range,
+                new ResMemberBind(
+                    range,
+                    new ResVarRef(range, _structDeclBuilder.ThisParameter, _structDeclBuilder.ThisStruct),
+                    new ResMemberSpec(range, _structDeclBuilder.ThisStruct, memberDecl)));
+        }
+    }
+
+    public class ResStructRef : ResMemberRef<ResStructDecl>, IResStructRef
     {
         public ResStructRef(
             SourceRange range,
@@ -249,7 +342,7 @@ namespace Spark.Resolve
         {
             get
             {
-                foreach (var ml in this.Decl.MemberLines)
+                foreach (var ml in this.Decl.GetMemberLines())
                     yield return new ResMemberLineSpec(
                         this,
                         ml);
@@ -294,19 +387,6 @@ namespace Spark.Resolve
             return new ResMemberLineSpec(this, memberLine);
         }
 
-        public IResContainerBuilder ContainerDecl
-        {
-            get { return Decl; }
-        }
 
-        IResMemberRef IResContainerBuilderRef.CreateMemberRef(SourceRange range, IResMemberDecl memberDecl)
-        {
-            return memberDecl.MakeRef(
-                range,
-                new ResMemberBind(
-                    range,
-                    new ResVarRef(range, ThisParameter, this),
-                    new ResMemberSpec(range, this, memberDecl)));
-        }
     }
 }

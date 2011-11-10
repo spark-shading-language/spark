@@ -26,6 +26,13 @@ namespace Spark
             return new Lazy<T>(null, generator);
         }
 
+        public static ILazy<T> New<T>(
+            this ILazyFactory factory,
+            Func<T> generator)
+        {
+            return new Lazy<T>(factory, generator);
+        }
+
         public static ILazy<T> Value<T>(T value)
         {
             return new Lazy<T>(value);
@@ -45,7 +52,7 @@ namespace Spark
     public class Lazy<T> : ILazy<T>
     {
         public Lazy(
-            LazyFactory factory,
+            ILazyFactory factory,
             Func<T> generator)
         {
             _generator = generator;
@@ -339,7 +346,8 @@ namespace Spark
     }
     */
 
-    public abstract class NewBuilder<T> : ILazy<T>, IBuilder
+    public abstract class NewBuilder<T> : ILazy<T>
+        where T : class
     {
         public NewBuilder(
             ILazyFactory lazy)
@@ -348,29 +356,38 @@ namespace Spark
             _lazy.Add(this);
         }
 
+        public ILazyFactory LazyFactory { get { return _lazy; } }
+
         public T Value
         {
-            get { return _value; }
-        }
-
-        void ILazy.Force()
-        {
-            if (_action != null)
+            get
             {
-                var action = _action;
-                _action = () => { throw new Exception("Circular reference!"); };
-                action();
-                _action = null;
+                if( _value == null )
+                {
+                    FlushActions();
+                    if( _value == null )
+                    {
+                        throw new NotImplementedException();
+                    }
+                }
+                return _value;
             }
         }
 
-        protected void SetValue(T value)
+        protected void SetValue( T value )
         {
             _value = value;
         }
 
+        void ILazy.Force()
+        {
+            FlushActions();
+        }
+
         public void AddAction(Action action)
         {
+            AssertBuildable();
+
             if (_action == null)
             {
                 _action = action;
@@ -382,12 +399,30 @@ namespace Spark
             }
         }
 
+        private void FlushActions()
+        {
+            AssertDoneBuilding();
+
+            if (_action != null)
+            {
+                var action = _action;
+                _action = () => { throw new Exception("Circular reference!"); };
+                action();
+                _action = null;
+            }
+        }
+
         protected void AssertBuildable()
         {
             // \todo: Checks?
         }
 
-        protected void DoneBuilding()
+        public void DoneBuilding()
+        {
+            // \todo: Checks?
+        }
+
+        protected void AssertDoneBuilding()
         {
             // \todo: Checks?
         }
@@ -400,48 +435,5 @@ namespace Spark
         private ILazyFactory _lazy;
         private Action _action;
         private T _value;
-
-
-
-        void IBuilder.DoneBuilding()
-        {
-            throw new NotImplementedException();
-        }
-
-        void IBuilder.Force()
-        {
-            throw new NotImplementedException();
-        }
-
-        void IBuilder.ForceDeep()
-        {
-            throw new NotImplementedException();
-        }
-
-        void IBuilder.AddBuildAction(Action action)
-        {
-            throw new NotImplementedException();
-        }
-
-        void IBuilder.AddPostAction(Action action)
-        {
-            throw new NotImplementedException();
-        }
-
-        void IBuilder.AddChild(IBuilder builder)
-        {
-            _lazy.Add(Lazy.New(() => { builder.Force(); return 0; }));
-        }
-
-        ILazy<U> IBuilder.NewLazy<U>(Func<U> generator)
-        {
-            throw new NotImplementedException();
-        }
-
-        void ILazyFactory.Add(ILazy instance)
-        {
-            _lazy.Add(instance);
-        }
-
     }
 }

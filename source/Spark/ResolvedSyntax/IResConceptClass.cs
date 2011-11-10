@@ -19,12 +19,8 @@ using System.Text;
 
 namespace Spark.ResolvedSyntax
 {
-    public interface IResConceptClassDecl : IResMemberDecl
+    public interface IResConceptClassDecl : IResSimpleContainerDecl
     {
-        IEnumerable<IResMemberDecl> Members { get; }
-        IEnumerable<IResMemberLineDecl> MemberLines { get; }
-        IEnumerable<IResMemberDecl> LookupMembers(Identifier name);
-        IResVarDecl ThisParameter { get; }
     }
 
     public interface IResConceptClassRef : IResMemberRef, IResTypeExp, IResContainerRef, ISubstitutable<IResConceptClassRef>

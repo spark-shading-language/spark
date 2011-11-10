@@ -19,16 +19,54 @@ using System.Text;
 
 namespace Spark.ResolvedSyntax
 {
-    public interface IResStructDecl : IResMemberDecl
+    public interface IResSimpleContainerDecl : IResMemberDecl
     {
-        IEnumerable<IResMemberDecl> Members { get; }
-        IEnumerable<IResMemberLineDecl> MemberLines { get; }
-        IEnumerable<IResMemberDecl> LookupMembers(Identifier name);
         IResVarDecl ThisParameter { get; }
+        IResMemberNameGroup LookupMemberNameGroup(Identifier name);
+        IEnumerable<IResMemberNameGroup> MemberNameGroups { get; }
+    }
+
+    public interface IResStructDecl : IResSimpleContainerDecl
+    {
     }
 
     public interface IResStructRef : IResMemberRef, IResTypeExp, IResContainerRef
     {
         IEnumerable<IResMemberLineSpec> MemberLines { get; }
+    }
+
+    public static class ResSimpleContainerDeclExtensions
+    {
+        public static IEnumerable<IResMemberLineDecl> GetMemberLines(
+            this IResSimpleContainerDecl container)
+        {
+            foreach (var mng in container.MemberNameGroups)
+                foreach (var mcg in mng.Categories)
+                    foreach (var line in mcg.Lines)
+                        yield return line;
+        }
+
+        public static IEnumerable<IResMemberDecl> GetMembers(
+            this IResSimpleContainerDecl container)
+        {
+            foreach (var line in container.GetMemberLines())
+                yield return line.EffectiveDecl;
+        }
+
+        public static IResMemberLineDecl FindMember(
+            this IResSimpleContainerDecl container,
+            IResMemberSpec memberSpec)
+        {
+            var mng = container.LookupMemberNameGroup(memberSpec.Name);
+            if (mng == null)
+                throw new KeyNotFoundException();
+
+            foreach (var mcg in mng.Categories)
+                foreach (var line in mcg.Lines)
+                    if (line.OriginalLexicalID == memberSpec.Decl.Line.OriginalLexicalID)
+                        return line;
+
+            throw new KeyNotFoundException();
+        }
     }
 }
