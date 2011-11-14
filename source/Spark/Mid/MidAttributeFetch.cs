@@ -23,11 +23,12 @@ namespace Spark.Mid
     {
         public MidAttributeFetch(
             MidPath obj,
-            MidAttributeDecl attribute )
+            MidAttributeDecl attribute,
+            ILazyFactory lazyFactory )
             : base(new MidDummyType())
         {
             _obj = obj;
-            _type = Lazy.New(() => _attribute.Value.Type);
+            _type = lazyFactory.New(() => _attribute.Value.Type);
             _attribute = Lazy.Value(attribute);
         }
 

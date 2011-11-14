@@ -154,8 +154,8 @@ namespace Spark.Resolve
 
                     builder.Parameters = newParams;
                     builder.ResultType = firstRef.ResultType;
-                    if (firstRef.Body != null)
-                        builder.LazyBody = Lazy.Value(firstRef.Body.Substitute(subst));
+                    builder.LazyBody = resContext.LazyFactory.New(() =>
+                        firstRef.Body == null ? null : firstRef.Body.Substitute(subst));
                 });
 
             return result;

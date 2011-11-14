@@ -59,8 +59,12 @@ namespace Spark.Mid
 
     public class MidExpFactory
     {
-        public MidExpFactory()
+        private ILazyFactory _lazyFactory;
+
+        public MidExpFactory(
+            ILazyFactory lazyFactory )
         {
+            _lazyFactory = lazyFactory;
         }
 
         public MidLit Lit<T>( T value, MidType type )
@@ -83,7 +87,7 @@ namespace Spark.Mid
             MidAttributeDecl attr )
         {
             return (MidAttributeRef) _attrRefs.Get( attr ).Cache(
-                () => new MidAttributeRef( attr ) );
+                () => new MidAttributeRef(attr, _lazyFactory));
         }
 
         public MidVoidExp Void { get { return _void; } }
@@ -93,7 +97,7 @@ namespace Spark.Mid
             MidAttributeDecl attribute )
         {
             return (MidAttributeFetch) _attrFetches.Get( obj ).Get( attribute ).Cache(
-                () => new MidAttributeFetch( obj, attribute ) );
+                () => new MidAttributeFetch(obj, attribute, _lazyFactory));
         }
 
         public MidFieldRef FieldRef(
@@ -217,10 +221,11 @@ namespace Spark.Mid
     public class MidAttributeRef : MidVal
     {
         public MidAttributeRef(
-            MidAttributeDecl decl)
+            MidAttributeDecl decl,
+            ILazyFactory lazyFactory)
             : base(new MidDummyType())
         {
-            _type = Lazy.New(() => Decl.Type);
+            _type = lazyFactory.New(() => Decl.Type);
             _decl = Lazy.Value(decl);
         }
 

@@ -99,6 +99,13 @@ namespace Spark.Resolve
             Identifier name )
             : base(lazyFactory)
         {
+            if (facet != null)
+            {
+                facet.AddAction(NewBuilderPhase.Seal, () => DoneBuilding());
+                AddDependency(facet);
+            }
+            DoneBuilding(NewBuilderPhase.Dependencies);
+
             _facet = facet;
             _name = name;
 
@@ -117,9 +124,21 @@ namespace Spark.Resolve
 
         public ResMemberCategoryGroupBuilder GetMemberCategoryGroup(ResMemberCategory category)
         {
+            ResMemberCategoryGroupBuilder result = null;
+            if (_categoryGroups.TryGetValue(category.Flavor, out result))
+                return result;
+
             AssertBuildable();
-            return _categoryGroups.Cache(category.Flavor,
-                () => new ResMemberCategoryGroupBuilder(_facet, this, category));
+            result = new ResMemberCategoryGroupBuilder(_facet, this, category);
+            _categoryGroups.Add( category.Flavor, result );
+            return result;
+        }
+
+        public ResMemberCategoryGroupBuilder FindMemberCategoryGroup(ResMemberCategory category)
+        {
+            ResMemberCategoryGroupBuilder result = null;
+            _categoryGroups.TryGetValue(category.Flavor, out result);
+            return result;
         }
     }
 
@@ -206,6 +225,10 @@ namespace Spark.Resolve
             ResMemberCategory category )
             : base(nameGroupBuilder.LazyFactory)
         {
+            nameGroupBuilder.AddAction(NewBuilderPhase.Seal, () => DoneBuilding());
+            AddDependency(nameGroupBuilder);
+            DoneBuilding(NewBuilderPhase.Dependencies);
+
             _facetBuilder = facetBuilder;
             _nameGroupBuilder = nameGroupBuilder;
             _category = category;
@@ -425,12 +448,17 @@ namespace Spark.Resolve
         private List<IResMemberDecl>        _inheritedDecls = new List<IResMemberDecl>();
 
         public ResMemberLineDeclBuilder(
+            ResMemberCategoryGroupBuilder parent,
             ILazyFactory lazy,
             Identifier name,
             ResLexicalID originalLexicalID,
             ResMemberCategory category )
             : base(lazy)
         {
+            parent.AddAction(NewBuilderPhase.Seal, () => DoneBuilding());
+            AddDependency(parent);
+            DoneBuilding(NewBuilderPhase.Dependencies);
+
             var resMemberLineDecl = new ResMemberLineDecl(
                 name,
                 originalLexicalID,

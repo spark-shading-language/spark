@@ -74,6 +74,11 @@ namespace Spark.Resolve
             throw new NotImplementedException();
         }
 
+        ResMemberNameGroupBuilder IResContainerFacetBuilder.FindMemberNameGroup(Identifier name)
+        {
+            throw new NotImplementedException();
+        }
+
         IEnumerable<ResMemberNameGroupBuilder> IResContainerFacetBuilder.MemberNameGroups { get { throw new NotFiniteNumberException(); } }
     }
 
@@ -149,7 +154,7 @@ namespace Spark.Resolve
                         var newParameter = new ResVarDecl(
                             oldParameter.Decl.Range,
                             oldParameter.Name,
-                            Lazy.New(() => oldParameter.Type.Substitute(subst)),
+                            resContext.LazyFactory.New(() => oldParameter.Type.Substitute(subst)),
                             oldParameter.Decl.Flags);
                         newParameters.Add(newParameter);
                         subst.Insert(oldParameter.Decl, (r) => new ResVarRef(r, newParameter));

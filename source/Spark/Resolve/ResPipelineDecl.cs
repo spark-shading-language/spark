@@ -83,6 +83,16 @@ namespace Spark.Resolve
             set { AssertBuildable(); _bases = value.ToArray(); }
         }
 
+        public IEnumerable<ResFacetDeclBuilder> Facets
+        {
+            get
+            {
+                return (from f in _facets
+                        select f);
+            }
+        }
+
+
         public IEnumerable<IResContainerFacetBuilder> InheritedFacets
         {
             get
@@ -243,6 +253,7 @@ namespace Spark.Resolve
                 range,
                 name);
             builder.AddAction(() => action(builder));
+            builder.DoneBuilding();
             return builder.Value;
         }
 
@@ -386,6 +397,9 @@ namespace Spark.Resolve
             IResPipelineRef originalPipeline)
             : base(lazyFactory)
         {
+            AddDependency(parent);
+            DoneBuilding(NewBuilderPhase.Dependencies);
+
             _originalPipeline = originalPipeline;
 
             var resFacetDecl = new ResFacetDecl(
@@ -394,6 +408,11 @@ namespace Spark.Resolve
                 NewLazy(() => (from mngb in _memberNameGroups.Values select mngb.Value).Eager()));
 
             SetValue(resFacetDecl);
+        }
+
+        public IEnumerable<ResMemberNameGroupBuilder> MemberNameGroups
+        {
+            get { return _memberNameGroups.Values; }
         }
 
         /*
@@ -434,6 +453,13 @@ namespace Spark.Resolve
         {
             return _memberNameGroups.Cache(name,
                 () => new ResMemberNameGroupBuilder(this.LazyFactory, this, name));
+        }
+
+        public ResMemberNameGroupBuilder FindMemberNameGroup(Identifier name)
+        {
+            ResMemberNameGroupBuilder result = null;
+            _memberNameGroups.TryGetValue(name, out result);
+            return result;
         }
 
         IEnumerable<ResMemberNameGroupBuilder> IResContainerFacetBuilder.MemberNameGroups { get { throw new NotFiniteNumberException(); } }

@@ -21,11 +21,6 @@ namespace Spark
 {
     public static class Lazy
     {
-        public static ILazy<T> New<T>(Func<T> generator)
-        {
-            return new Lazy<T>(null, generator);
-        }
-
         public static ILazy<T> New<T>(
             this ILazyFactory factory,
             Func<T> generator)
@@ -55,6 +50,9 @@ namespace Spark
             ILazyFactory factory,
             Func<T> generator)
         {
+            if (factory == null)
+                throw new NullReferenceException("factory");
+            factory.Add(this);
             _generator = generator;
         }
 
@@ -298,7 +296,7 @@ namespace Spark
         public ILazy<T> NewLazy<T>(Func<T> generator)
         {
             var child = new Builder(this);
-            var result = Lazy.New(generator);
+            var result = this.New(generator);
             child.AddBuildAction(() => { result.Force(); });
             child.DoneBuilding();
             return result;
@@ -346,7 +344,23 @@ namespace Spark
     }
     */
 
-    public abstract class NewBuilder<T> : ILazy<T>
+    public enum NewBuilderPhase
+    {
+        Initial = 0,
+        Dependencies,
+        Header,
+        Body,
+        Seal,
+        Finalize,
+        Final,
+    };
+
+    public interface INewBuilder : ILazy
+    {
+        void AddAction(NewBuilderPhase phase, Action action);
+    }
+
+    public abstract class NewBuilder<T> : ILazy<T>, INewBuilder
         where T : class
     {
         public NewBuilder(
@@ -364,7 +378,7 @@ namespace Spark
             {
                 if( _value == null )
                 {
-                    FlushActions();
+                    Force();
                     if( _value == null )
                     {
                         throw new NotImplementedException();
@@ -379,61 +393,128 @@ namespace Spark
             _value = value;
         }
 
-        void ILazy.Force()
+        public void Force()
         {
-            FlushActions();
+            FlushActions(NewBuilderPhase.Finalize);
         }
+
+        public void Force(NewBuilderPhase phase)
+        {
+            FlushActions(phase);
+        }
+
 
         public void AddAction(Action action)
         {
-            AssertBuildable();
-
-            if (_action == null)
-            {
-                _action = action;
-            }
-            else
-            {
-                var oldAction = _action;
-                _action = () => { oldAction(); action(); };
-            }
+            AddAction(NewBuilderPhase.Header, action);
         }
 
-        private void FlushActions()
+        public void AddAction(NewBuilderPhase phase, Action action)
         {
-            AssertDoneBuilding();
-
-            if (_action != null)
+            if( phase <= _addedActionsPhase && (phase <= NewBuilderPhase.Body))
             {
-                var action = _action;
-                _action = () => { throw new Exception("Circular reference!"); };
+                throw new Exception("Attempt to add action too late!");
+            }
+
+            if (phase <= _flushedActionsPhase)
+            {
+                throw new Exception("Attempt to add action too late!");
+            }
+
+            if( _actionForPhase == null )
+            {
+                _actionForPhase = new Action[(int)NewBuilderPhase.Final];
+            }
+
+            var oldAction = _actionForPhase[(int) phase];
+            var newAction = action;
+
+            if (oldAction != null)
+            {
+                newAction = () => { oldAction(); action(); };
+            }
+
+            _actionForPhase[(int) phase] = newAction;
+        }
+
+        private void FlushActions(NewBuilderPhase phase)
+        {
+            for (NewBuilderPhase phaseToRun = _flushedActionsPhase; phaseToRun <= phase; _flushedActionsPhase = phaseToRun, phaseToRun = (NewBuilderPhase)(phaseToRun + 1))
+            {
+                if (phaseToRun == NewBuilderPhase.Final)
+                    break;
+
+                if (phaseToRun > _addedActionsPhase)
+                {
+                    throw new Exception("Attempt to flush builder too early");
+                }
+
+                if (_actionForPhase == null)
+                    continue;
+
+                var action = _actionForPhase[(int)phaseToRun];
+                if (action == null)
+                    continue;
+
+                _actionForPhase[(int)phaseToRun] = null;
+
+                _debugRunningActionsPhase = phaseToRun;
                 action();
-                _action = null;
+                _debugRunningActionsPhase = NewBuilderPhase.Initial;
             }
         }
 
         protected void AssertBuildable()
         {
-            // \todo: Checks?
+            AssertBuildable(NewBuilderPhase.Header);
+        }
+
+        protected void AssertBuildable(NewBuilderPhase phase)
+        {
+            if (phase <= _flushedActionsPhase)
+            {
+                throw new Exception("Attempt to modify builder too late!");
+            }
         }
 
         public void DoneBuilding()
         {
-            // \todo: Checks?
+            DoneBuilding(NewBuilderPhase.Final);
         }
 
-        protected void AssertDoneBuilding()
+        public void DoneBuilding(NewBuilderPhase phase)
         {
-            // \todo: Checks?
+            if (phase <= _addedActionsPhase)
+            {
+                throw new Exception("Attempt to finalize builder too late!");
+            }
+
+            _addedActionsPhase = phase;
+        }
+
+        protected void AddDependency(ILazy dependency)
+        {
+            AddAction(NewBuilderPhase.Dependencies, () => { dependency.Force(); });
         }
 
         protected ILazy<U> NewLazy<U>(Func<U> generator)
         {
-            return Lazy.New<U>(() => { ((ILazy)this).Force(); return generator(); });
+            return NewLazy<U>(NewBuilderPhase.Final, generator);
+        }
+
+        protected ILazy<U> NewLazy<U>(NewBuilderPhase phase, Func<U> generator)
+        {
+            return _lazy.New<U>(() => { Force(phase); return generator(); });
         }
 
         private ILazyFactory _lazy;
-        private Action _action;
+
+        private Action[] _actionForPhase;
+        private NewBuilderPhase _addedActionsPhase; // phases for which we are done adding actions
+        private NewBuilderPhase _flushedActionsPhase; // phases for which we are done running actions
+
+        private NewBuilderPhase _debugRunningActionsPhase;
+
         private T _value;
     }
 }

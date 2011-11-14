@@ -245,7 +245,7 @@ namespace Spark.Mid
         public MidEmitContext( IdentifierFactory identifiers )
         {
             _identifiers = identifiers;
-            _exps = new MidExpFactory();
+            _exps = new MidExpFactory( _lazy );
         }
 
         private LazyFactory _lazy = new LazyFactory();

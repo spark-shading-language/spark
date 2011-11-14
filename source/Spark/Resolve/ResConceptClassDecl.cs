@@ -55,6 +55,13 @@ namespace Spark.Resolve
                 () => new ResMemberNameGroupBuilder(this.LazyFactory, this, name));
         }
 
+        public ResMemberNameGroupBuilder FindMemberNameGroup(Identifier name)
+        {
+            ResMemberNameGroupBuilder result = null;
+            _memberNameGroups.TryGetValue(name, out result);
+            return result;
+        }
+
         public IResVarDecl ThisParameter
         {
             get { return _thisParameter; }
@@ -188,16 +195,16 @@ namespace Spark.Resolve
                 {
                     var memberLine = ml; // Freaking C# variable capture!!!!
 
+                    var memberNameGroupBuilder = builder.GetMemberNameGroup(memberLine.Name);
+                    var memberCategoryGroupBuilder = memberNameGroupBuilder.GetMemberCategoryGroup(memberLine.Category);
+
                     var newMemberLineBuilder = new ResMemberLineDeclBuilder(
+                        memberCategoryGroupBuilder,
                         builder.LazyFactory,
                         memberLine.Name,
                         memberLine.OriginalLexicalID,
                         memberLine.Category);
-
-                    builder
-                        .GetMemberNameGroup(memberLine.Name)
-                        .GetMemberCategoryGroup(memberLine.Category)
-                        .AddLine(newMemberLineBuilder);
+                    memberCategoryGroupBuilder.AddLine(newMemberLineBuilder);
 
                     newMemberLineBuilder.AddAction(() =>
                     {

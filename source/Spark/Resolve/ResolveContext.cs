@@ -135,6 +135,7 @@ namespace Spark.Resolve
 
             var originalLexicalID = new ResLexicalID();
             var lineBuilder = new ResMemberLineDeclBuilder(
+                categoryGroupBuilder,
                 LazyFactory,
                 id,
                 originalLexicalID,
@@ -148,8 +149,6 @@ namespace Spark.Resolve
             lineBuilder.AddTag(new ResBuiltinTag("c++", name));
             lineBuilder.AddTag(new ResBuiltinTag("llvm", name));
 
-            lineBuilder.DoneBuilding();
-            categoryGroupBuilder.DoneBuilding();
             nameGroupBuilder.DoneBuilding();
 
             Func<SourceRange, IResTypeExp> gen = (r) =>
@@ -376,16 +375,17 @@ namespace Spark.Resolve
                                       select p.Item2).ToArray();
                     var first = memberRefs[0];
 
+                    var memberNameGroupBuilder = facet.GetMemberNameGroup(firstSpec.Name);
+                    var memberCategoryGroupBuilder = memberNameGroupBuilder.GetMemberCategoryGroup(firstSpec.Category);
+
                     var newMemberLineBuilder = new ResMemberLineDeclBuilder(
+                        memberCategoryGroupBuilder,
                         LazyFactory,
                         firstSpec.Name,
                         firstSpec.OriginalLexicalID,
                         firstSpec.Category);
 
-                    facet
-                        .GetMemberNameGroup(firstSpec.Name)
-                        .GetMemberCategoryGroup(firstSpec.Category)
-                        .AddLine(newMemberLineBuilder);
+                    memberCategoryGroupBuilder.AddLine(newMemberLineBuilder);
 
                     var inheritedDecls = (from mr in memberRefs
                                           select ResMemberDecl.CreateInheritedDecl(
@@ -418,7 +418,6 @@ namespace Spark.Resolve
                     facet.AddMember( newDecl );
                      */
                 }
-                facet.DoneBuilding();
             }
 
 
@@ -426,18 +425,34 @@ namespace Spark.Resolve
                 (new ResMemberSpec(r, thisPipeline, m)).Bind(r,
                     new ResVarRef(r, thisParameter));
 
-            // Now consider direct member decls
+            // Now consider direct member decls:
             foreach (var absMemberDecl in absMembers)
             {
-                var declEnv = innerEnv.NestDiagnostics();
+                if (absMemberDecl.HasModifier(AbsModifiers.Override))
+                    continue;
                 ResolveMemberDecl(
                     thisPipelineBuilder,
                     absMemberDecl,
-                    declEnv,
+                    innerEnv.NestDiagnostics(),
                     makeRef);
             }
 
-            directFacet.DoneBuilding();
+            // Then seal up the list of member lines in each facet
+            // (since override decls can't add/remove lines)
+            foreach (var facetBuilder in resShaderClassBuilder.Facets)
+                facetBuilder.DoneBuilding();
+
+            // Do 'override' decls after sealing up the shader class itself:
+            foreach (var absMemberDecl in absMembers)
+            {
+                if (!absMemberDecl.HasModifier(AbsModifiers.Override))
+                    continue;
+                ResolveMemberDecl(
+                    thisPipelineBuilder,
+                    absMemberDecl,
+                    innerEnv.NestDiagnostics(),
+                    makeRef);
+            }
 
             // Add some checks that should be done after the pipeline has been fully resolved:
             LazyFactory.New(() =>
@@ -459,9 +474,9 @@ namespace Spark.Resolve
                 // Find the first 'primary' class in the inheritance
                 // chain (other than the direct class...).
                 var primaryBase = (from f in resShaderClass.Facets
-                                   where f != resShaderClass.DirectFacet
-                                   where f.OriginalPipeline.MixinMode == ResMixinMode.Primary
-                                   select f.OriginalPipeline).FirstOrDefault();
+                                    where f != resShaderClass.DirectFacet
+                                    where f.OriginalPipeline.MixinMode == ResMixinMode.Primary
+                                    select f.OriginalPipeline).FirstOrDefault();
 
                 // If such a primary base is found, then assert that
                 // all the other primary bases are super-classes of it.
@@ -733,16 +748,25 @@ namespace Spark.Resolve
             ResEnv env,
             Func<IResMemberDecl, SourceRange, IResTerm> makeRef )
         {
+            var category = GetMemberCategory(resContainer.ContainerDecl, absMemberDecl);
+
             // There are really two cases here: members marked
             // as overriding an existing declaration, and new
             // members.
-//            if (absMemberDecl.HasModifier(AbsModifiers.Override))
+            if (absMemberDecl.HasModifier(AbsModifiers.Override))
             {
                 // We need to find a compatible declaration to override.
-                
-//                throw new NotImplementedException();
+                // As a result, we can't pin the resolution of the member
+                // to a particular member name/category group yet.
+                // This could prove tricky:
+
+                ResolveOverrideMemberDecl(
+                    resContainer,
+                    category,
+                    absMemberDecl,
+                    env.NestDiagnostics());
             }
-//            else
+            else
             {
                 // We know that this is a new declaration
                 // (although we may have to warn if there *was*
@@ -750,15 +774,23 @@ namespace Spark.Resolve
                 // didn't specify the 'new' keyword).
 
                 var name = absMemberDecl.Name;
+
+                var directFacetBuilder = resContainer.ContainerDecl.DirectFacetBuilder;
                 var memberNameGroup = resContainer.ContainerDecl.DirectFacetBuilder.GetMemberNameGroup(name);
-                var category = GetMemberCategory(resContainer.ContainerDecl, absMemberDecl);
                 var memberCategoryGroup = memberNameGroup.GetMemberCategoryGroup(category);
 
-                memberCategoryGroup.AddAction(() =>
+                var memberLineBuilder = CreateDirectLine(
+                    resContainer,
+                    memberCategoryGroup,
+                    absMemberDecl,
+                    env);
+
+                memberLineBuilder.AddAction(() =>
                 {
                     ResolveMemberDecl(
                         resContainer,
-                        memberCategoryGroup,
+                        memberLineBuilder,
+                        category,
                         absMemberDecl,
                         env.NestDiagnostics());
                 });
@@ -854,16 +886,67 @@ namespace Spark.Resolve
 
         public void ResolveMemberDecl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroupBuilder resGroup,
+            ResMemberLineDeclBuilder resLine,
+            ResMemberCategory resCategory,
             AbsMemberDecl absMemberDecl,
             ResEnv env )
         {
             ResolveMemberDeclImpl(
                 (dynamic)resContainer,
-                resGroup,
-                (dynamic)resGroup.Category,
+                resLine,
+                (dynamic)resCategory,
                 (dynamic)absMemberDecl,
                 env);
+        }
+
+        public void ResolveOverrideMemberDecl(
+            IResContainerBuilderRef resContainer,
+            ResMemberCategory resCategory,
+            AbsMemberDecl absMemberDecl,
+            ResEnv env)
+        {
+            ResolveOverrideMemberDeclImpl(
+                (dynamic)resContainer,
+                (dynamic)resCategory,
+                (dynamic)absMemberDecl,
+                env);
+        }
+
+        public void ResolveOverrideMemberDeclImpl(
+            IResContainerBuilderRef resContainer,
+            ResAttributeCategory resCategory,
+            AbsSlotDecl absSlotDecl,
+            ResEnv env)
+        {
+            ResolveMemberDecl(
+                resContainer,
+                (ResMemberLineDeclBuilder) null,
+                resCategory,
+                absSlotDecl,
+                env);
+        }
+
+        public void ResolveOverrideMemberDeclImpl(
+            IResContainerBuilderRef resContainer,
+            ResMethodCategory resCategory,
+            AbsMethodDecl absMethodDecl,
+            ResEnv env)
+        {
+            ResolveMemberDecl(
+                resContainer,
+                (ResMemberLineDeclBuilder)null,
+                resCategory,
+                absMethodDecl,
+                env);
+        }
+
+        public void ResolveOverrideMemberDeclImpl(
+            IResContainerBuilderRef resContainer,
+            ResMemberCategory resCategory,
+            AbsMemberDecl absMemberDecl,
+            ResEnv env)
+        {
+            env.Error(absMemberDecl.Range, "This type of declaration does not support the 'override' keyword");
         }
 
         private ResMemberCategory GetMemberCategory(
@@ -926,7 +1009,7 @@ namespace Spark.Resolve
 
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroupBuilder resGroup,
+            ResMemberLineDeclBuilder resLine,
             ResMemberCategory category,
             AbsElementDecl absElementDecl,
             ResEnv env)
@@ -934,19 +1017,12 @@ namespace Spark.Resolve
             // \todo: Assert that element decl can't be 'override'
             // \todo: Check that element decl doesn't need 'new'
 
-            // Ignore it all
-            var line = CreateDirectLine(
-                resContainer,
-                resGroup,
-                absElementDecl,
-                env);
-
             var resElement = new ResElementDecl(
-                line,
+                resLine,
                 absElementDecl.Range,
                 absElementDecl.Name);
 
-            line.DirectDecl = resElement;
+            resLine.DirectDecl = resElement;
         }
 
 
@@ -1015,9 +1091,135 @@ namespace Spark.Resolve
             return resParam;
         }
 
+
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroupBuilder resGroup,
+            ResMemberLineDeclBuilder resLineBuilder,
+            ResAttributeCategory category,
+            AbsSlotDecl absAttributeDecl,
+            ResEnv env)
+        {
+            IResFreqQualType resType = null;
+            if (absAttributeDecl.Type != null)
+            {
+                resType = (IResFreqQualType)Coerce(
+                    ResolveTerm(absAttributeDecl.Type, env),
+                    ResKind.FreqQualType,
+                    env);
+            }
+
+            if (resLineBuilder == null)
+            {
+                resLineBuilder = FindOrCreateAttributeLine(
+                    resContainer,
+                    category,
+                    absAttributeDecl,
+                    ref resType,
+                    env);
+            }
+
+            var prevDecl = (ResAttributeDecl)resLineBuilder.EffectiveDecl;
+
+            bool isInput = absAttributeDecl.HasModifier(AbsModifiers.Input);
+            bool isOutput = absAttributeDecl.HasModifier(AbsModifiers.Output);
+            bool isOptional = absAttributeDecl.HasModifier(AbsModifiers.Optional);
+
+            if (prevDecl != null)
+            {
+                if (prevDecl.IsInput())
+                {
+                    env.Error(
+                        absAttributeDecl.Range,
+                        "Cannot override 'input' attribute");
+                    isInput = true;
+                }
+
+                if (prevDecl.IsOutput())
+                {
+                    isOutput = true;
+                }
+
+                if (isOptional && !prevDecl.IsOptional())
+                {
+                    env.Error(
+                        absAttributeDecl.Range,
+                        "Cannot make non-optional attribute optional.");
+                }
+
+                if (prevDecl.IsOptional())
+                {
+                    isOptional = true;
+                }
+            }
+
+            var resAttribute = ResAttributeDecl.Build(
+                LazyFactory,
+                resLineBuilder,
+                absAttributeDecl.Range,
+                absAttributeDecl.Name,
+                (builder) =>
+                {
+                    if (isInput)
+                        builder.Flags |= ResAttributeFlags.Input;
+                    if (isOutput)
+                        builder.Flags |= ResAttributeFlags.Output;
+                    if (isOptional)
+                        builder.Flags |= ResAttributeFlags.Optional;
+
+                    builder.Type = resType;
+
+                    var resLine = resLineBuilder.Value;
+
+                    if (absAttributeDecl.Init != null)
+                    {
+                        if (resLine.ConcretenessMode == ResMemberConcretenessMode.Abstract)
+                        {
+                            env.Error(
+                                absAttributeDecl.Range,
+                                "Abstract attribute cannot have an initializer");
+                        }
+                        if (isInput)
+                        {
+                            env.Error(
+                                absAttributeDecl.Range,
+                                "Input attribute cannot have an initializer");
+                        }
+
+                        var initEnv = env.NestDiagnostics().NestBaseAttributeType(resType);
+                        var lazyInit = initEnv.Lazy(() =>
+                        {
+                            var initTerm = ResolveTerm(absAttributeDecl.Init, initEnv);
+                            var init = Coerce(initTerm, resType, initEnv);
+                            return init;
+                        });
+
+                        builder.LazyInit = lazyInit;
+                    }
+                    else
+                    {
+                        if (resLine.ConcretenessMode != ResMemberConcretenessMode.Abstract)
+                        {
+                            if (!isInput && !isOptional)
+                            {
+                                if (!resLine.Tags.Any((tag) => tag is ResBuiltinTag))
+                                {
+                                    env.Error(
+                                        absAttributeDecl.Range,
+                                        "Non-abstract, non-input attribute must have an initializer");
+                                }
+                            }
+                        }
+                    }
+
+                });
+            resLineBuilder.DirectDecl = resAttribute;
+        }
+
+#if FOOBARBAZ
+
+        private void ResolveMemberDeclImpl(
+            IResContainerBuilderRef resContainer,
+            ResMemberLineDeclBuilder resLine,
             ResAttributeCategory category,
             AbsSlotDecl absAttributeDecl,
             ResEnv env)
@@ -1134,10 +1336,11 @@ namespace Spark.Resolve
             });
             resMemberLineBuilder.DirectDecl = resAttribute;
         }
+#endif
 
         private ResMemberLineDeclBuilder FindOrCreateAttributeLine(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroupBuilder resGroup,
+            ResMemberCategory category,
             AbsSlotDecl absAttribute,
             ref IResFreqQualType resType,
             ResEnv env)
@@ -1149,9 +1352,9 @@ namespace Spark.Resolve
             if (!absAttribute.HasModifier(AbsModifiers.New))
             {
                 var candidates = (from facet in resContainer.ContainerDecl.InheritedFacets
-                                  let mng = facet.GetMemberNameGroup(resGroup.Name)
+                                  let mng = facet.FindMemberNameGroup(absAttribute.Name)
                                   where mng != null
-                                  let mcg = mng.GetMemberCategoryGroup(resGroup.Category)
+                                  let mcg = mng.FindMemberCategoryGroup(category)
                                   where mcg != null
                                   from ml in mcg.Lines
                                   let decl = ml.EffectiveDecl
@@ -1226,7 +1429,7 @@ namespace Spark.Resolve
 
             return CreateDirectLine(
                 resContainer,
-                resGroup,
+                resContainer.ContainerDecl.DirectFacetBuilder.GetMemberNameGroup(absAttribute.Name).GetMemberCategoryGroup(category),
                 absAttribute,
                 env);
         }
@@ -1289,17 +1492,11 @@ namespace Spark.Resolve
 
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroupBuilder resGroup,
+            ResMemberLineDeclBuilder resLineBuilder,
             ResFieldCategory category,
             AbsSlotDecl absFieldDecl,
             ResEnv env)
         {
-            var resLineBuilder = CreateDirectLine(
-                resContainer,
-                resGroup,
-                absFieldDecl,
-                env);
-
             var resField = ResFieldDecl.Build(
                 LazyFactory,
                 resLineBuilder,
@@ -1319,7 +1516,190 @@ namespace Spark.Resolve
 
         public void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroupBuilder resGroup,
+            ResMemberLineDeclBuilder resLineBuilder,
+            ResMethodCategory category,
+            AbsMethodDecl absMethodDecl,
+            ResEnv env)
+        {
+            var genericParamScope = new ResLocalScope();
+            var genericParamEnv = env.NestScope(genericParamScope);
+
+            IResGenericParamDecl[] resGenericParams = null;
+            if (absMethodDecl.GenericParams != null)
+            {
+                resGenericParams = (from p in absMethodDecl.GenericParams
+                                    select ResolveGenericParam(p, genericParamEnv, genericParamScope)).Eager();
+            }
+            if (resGenericParams != null)
+            {
+                foreach (var resValParam in resGenericParams.OfType<ResVarDecl>())
+                {
+                    if (!resValParam.IsImplicit()) continue;
+
+                    var resParamContainerType = resValParam.Type as IResContainerRef;
+                    if (resParamContainerType == null) continue;
+
+                    genericParamEnv = genericParamEnv.NestScope(
+                        new ResPipelineScope(
+                            resParamContainerType,
+                            resValParam));
+
+                }
+            }
+
+            var paramScope = new ResLocalScope();
+            var paramEnv = genericParamEnv.NestScope(paramScope);
+
+            var resParams = (from absParam in absMethodDecl.parameters
+                             select ResolveParamDecl(absParam, paramScope, paramEnv)).Eager();
+
+            if (resLineBuilder == null)
+            {
+                resLineBuilder = FindOrCreateMethod(
+                    resContainer,
+                    absMethodDecl.Name,
+                    category,
+                    absMethodDecl,
+                    resParams,
+                    resGenericParams,
+                    env);
+            }
+
+            var resMethod = ResMethodDecl.Build(
+                LazyFactory,
+                resLineBuilder,
+                absMethodDecl.Range,
+                absMethodDecl.Name,
+                (builder) =>
+                {
+                    var resLine = resLineBuilder.Value;
+
+                    var tags = (from absTag in absMethodDecl.Attributes
+                                let tag = ResolveTag(absTag, env)
+                                where tag != null
+                                select tag).Eager();
+                    resLineBuilder.AddTags(tags);
+
+                    builder.Parameters = resParams;
+
+                    var resultType = ResolveTypeExp(absMethodDecl.resultType, paramEnv);
+                    builder.ResultType = resultType;
+
+                    IResElementRef implicitFreq = null;
+                    if (resultType is ResFreqQualType)
+                    {
+                        var resultFQType = (ResFreqQualType)resultType;
+                        var resultFreq = resultFQType.Freq;
+
+                        // All parameters must have frequencies...
+                        foreach (var p in resParams)
+                        {
+                            if (!(p.Type is ResFreqQualType))
+                            {
+                                env.Error(
+                                    p.Range,
+                                    "Method must declare an explicit frequency on every parameter");
+                            }
+                        }
+
+                        if (resParams.Count() == 0
+                            ||
+                            resParams.All((p) => (p.Type is ResFreqQualType)
+                            && IsSameType(
+                                ((IResFreqQualType)p.Type).Freq,
+                                resultFreq)))
+                        {
+                            implicitFreq = resultFreq;
+                            builder.Flavor = ResMethodFlavor.SingleFreq;
+                        }
+                        else
+                        {
+                            builder.Flavor = ResMethodFlavor.Conversion;
+                        }
+                    }
+                    else
+                    {
+                        // Parameters must not have frequencies
+                        foreach (var p in resParams)
+                        {
+                            if (p.Type is ResFreqQualType)
+                            {
+                                env.Error(
+                                    p.Range,
+                                    "Method with ordinary return type cannot have frequency-qualified parameter type");
+                            }
+                        }
+
+                        builder.Flavor = ResMethodFlavor.Ordinary;
+                    }
+
+                    // Now deal with the method body
+                    if (absMethodDecl.body == null)
+                    {
+                        if (resLine.ConcretenessMode != ResMemberConcretenessMode.Abstract)
+                        {
+                            if (!resLine.Tags.Any((tag) => tag is ResBuiltinTag))
+                            {
+                                env.Error(
+                                    absMethodDecl.Range,
+                                    "Non-abstract method '{0}' must declare a body",
+                                    absMethodDecl.Name);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var absBody = absMethodDecl.body;
+                        var bodyEnv = paramEnv.NestImplicitFreq(implicitFreq);
+
+                        var resLazyBody = LazyFactory.New(() =>
+                        {
+                            var returnTarget = new ResLabel(
+                                absBody.Range,
+                                _identifiers.unique("return"),
+                                resultType);
+                            var stmtContext = new StmtContext
+                            {
+                                ReturnTarget = returnTarget,
+                                ImplicitFreq = implicitFreq,
+                            };
+                            var bodyStmt = ResolveStmt(absMethodDecl.body, bodyEnv, stmtContext);
+
+                            var resBody = new ResLabelExp(
+                                absBody.Range,
+                                returnTarget,
+                                bodyStmt);
+
+                            return resBody;
+                        });
+
+                        builder.LazyBody = resLazyBody;
+                    }
+                });
+
+            IResMemberDecl decl = resMethod;
+            if (resGenericParams != null)
+            {
+                var resGeneric = ResGenericDecl.Build(
+                    LazyFactory,
+                    resLineBuilder,
+                    absMethodDecl.Range,
+                    absMethodDecl.Name,
+                    (builder) =>
+                    {
+                        builder.Parameters = resGenericParams;
+                        builder.InnerDecl = resMethod;
+                    });
+
+                decl = resGeneric;
+            }
+            resLineBuilder.DirectDecl = decl;
+        }
+
+#if FOOBARBAZ
+        public void ResolveMemberDeclImpl(
+            IResContainerBuilderRef resContainer,
+            ResMemberLineDeclBuilder resLineBuilder,
             ResMethodCategory category,
             AbsMethodDecl absMethodDecl,
             ResEnv env)
@@ -1385,7 +1765,8 @@ namespace Spark.Resolve
 
             var resLineBuilder = FindOrCreateMethod(
                 resContainer,
-                resGroup,
+                absMethodDecl.Name,
+                category,
                 absMethodDecl,
                 resParams,
                 resGenericParams,
@@ -1522,6 +1903,7 @@ namespace Spark.Resolve
             }
             resLineBuilder.DirectDecl = decl;
         }
+#endif
 
         /*
         private IResGenericParamDecl ResolveWhereClause(
@@ -1553,7 +1935,8 @@ namespace Spark.Resolve
 
         private ResMemberLineDeclBuilder FindOrCreateMethod(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroupBuilder resGroup,
+            Identifier name,
+            ResMemberCategory category,
             AbsMethodDecl absMethodDecl,
             IResVarDecl[] resParams,
             IResGenericParamDecl[] resGenericParams,
@@ -1564,9 +1947,9 @@ namespace Spark.Resolve
             if (!absMethodDecl.HasModifier(AbsModifiers.New))
             {
                 var candidates = (from facet in resContainer.ContainerDecl.InheritedFacets
-                                  let mng = facet.GetMemberNameGroup(resGroup.Name)
+                                  let mng = facet.FindMemberNameGroup(name)
                                   where mng != null
-                                  let mcg = mng.GetMemberCategoryGroup(resGroup.Category)
+                                  let mcg = mng.FindMemberCategoryGroup(category)
                                   where mcg != null
                                   from ml in mcg.Lines
                                   let decl = ml.EffectiveDecl
@@ -1609,7 +1992,7 @@ namespace Spark.Resolve
 
             return CreateDirectLine(
                 resContainer,
-                resGroup,
+                resContainer.ContainerDecl.DirectFacetBuilder.GetMemberNameGroup(name).GetMemberCategoryGroup(category),
                 absMethodDecl,
                 env);
         }
@@ -1621,6 +2004,7 @@ namespace Spark.Resolve
             ResEnv env)
         {
             var result = new ResMemberLineDeclBuilder(
+                resGroup,
                 LazyFactory,
                 absMemberDecl.Name,
                 new ResLexicalID(),
@@ -1798,17 +2182,11 @@ namespace Spark.Resolve
 
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroupBuilder resGroup,
+            ResMemberLineDeclBuilder resLineBuilder,
             ResStructCategory category,
             AbsStructDecl absStruct,
             ResEnv env)
         {
-            var resLineBuilder = CreateDirectLine(
-                resContainer,
-                resGroup,
-                absStruct,
-                env);
-
             var resStruct = ResStructDecl.Build(
                 LazyFactory,
                 resLineBuilder,
@@ -1846,19 +2224,13 @@ namespace Spark.Resolve
 
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroupBuilder resGroup,
+            ResMemberLineDeclBuilder resLineBuilder,
             ResTypeSlotCategory category,
             AbsTypeSlotDecl absTypeDecl,
             ResEnv env)
         {
             // No overriding/overloading allowed...
             // Need to ensure this... :(
-
-            var resLineBuilder = CreateDirectLine(
-                resContainer,
-                resGroup,
-                absTypeDecl,
-                env);
 
             var resTypeDecl = new ResTypeSlotDecl(
                 resLineBuilder,
@@ -1899,19 +2271,13 @@ namespace Spark.Resolve
 
         private void ResolveMemberDeclImpl(
             IResContainerBuilderRef resContainer,
-            ResMemberCategoryGroupBuilder resGroup,
+            ResMemberLineDeclBuilder resLineBuilder,
             ResConceptClassCategory category,
             AbsConceptDecl absDecl,
             ResEnv env)
         {
             // No overriding/overloading allowed...
             // Need to ensure this... :(
-
-            var resLineBuilder = CreateDirectLine(
-                resContainer,
-                resGroup,
-                absDecl,
-                env);
 
             var resGenericParamScope = new ResLocalScope();
             var resGenericParamEnv = env.NestScope(resGenericParamScope);
@@ -2979,10 +3345,13 @@ namespace Spark.Resolve
                 IResTerm arg,
                 IResGenericParamRef param)
             {
+                // Disable implicit type conversions inside of generic argument lists.
+                // This helps to avoid a circual-reference problem that could otherwise
+                // crop up.
                 return _context.Coerce(
                     arg,
                     param.Classifier,
-                    _env);
+                    _env.NestDisableConversions());
             }
 
             public override IResTerm Gen()

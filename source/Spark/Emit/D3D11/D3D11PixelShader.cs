@@ -311,7 +311,7 @@ namespace Spark.Emit.D3D11
                 }
             }
 
-            srcExp = new MidAttributeRef(attr);
+            srcExp = new MidAttributeRef(attr, new LazyFactory());
         }
 
         private AttrInfo DecomposeAttrImpl(

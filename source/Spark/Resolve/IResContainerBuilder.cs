@@ -21,9 +21,10 @@ using Spark.ResolvedSyntax;
 
 namespace Spark.Resolve
 {
-    public interface IResContainerFacetBuilder
+    public interface IResContainerFacetBuilder : INewBuilder
     {
         ResMemberNameGroupBuilder GetMemberNameGroup(Identifier name);
+        ResMemberNameGroupBuilder FindMemberNameGroup(Identifier name);
         IEnumerable<ResMemberNameGroupBuilder> MemberNameGroups { get; }
     }
 
