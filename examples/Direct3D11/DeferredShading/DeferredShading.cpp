@@ -155,7 +155,11 @@ void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice
     // NOTE: We actually only need to clear the depth buffer here since we replace unwritten (i.e. far plane) samples
     // with the skybox. We use the depth buffer to reconstruct position and only in-frustum positions are shaded.
     // NOTE: Complementary Z buffer: clear to 0 (far)!
+    FLOAT clearColor[] = {0.0f, 0.0f, 0.0f, 0.f};
     d3dDeviceContext->ClearDepthStencilView(mDepthBuffer->GetDepthStencil(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+    d3dDeviceContext->ClearRenderTargetView(mGBufferRTV[0], clearColor);
+    d3dDeviceContext->ClearRenderTargetView(mGBufferRTV[1], clearColor);
+    d3dDeviceContext->ClearRenderTargetView(mGBufferRTV[2], clearColor);
 
     d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), &mGBufferRTV.front(), mDepthBuffer->GetDepthStencil());
 
