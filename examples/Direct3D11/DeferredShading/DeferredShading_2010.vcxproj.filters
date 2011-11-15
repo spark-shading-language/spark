@@ -24,12 +24,6 @@
     <None Include="..\..\DXUT\optional\directx.ico">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="DeferredShading_PS.hlsl">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="DeferredShading_VS.hlsl">
-      <Filter>Shaders</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="..\..\DXUT11\Core\dpiaware.manifest">
@@ -114,6 +108,12 @@
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="DeferredShading.spark">
+      <Filter>Shaders</Filter>
+    </CustomBuild>
+    <CustomBuild Include="DeferredShading_PS.hlsl">
+      <Filter>Shaders</Filter>
+    </CustomBuild>
+    <CustomBuild Include="DeferredShading_VS.hlsl">
       <Filter>Shaders</Filter>
     </CustomBuild>
   </ItemGroup>

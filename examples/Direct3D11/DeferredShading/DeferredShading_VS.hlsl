@@ -13,7 +13,8 @@ cbuffer cbPerObject : register( b0 )
 {
 	matrix		g_mWorldViewProjection	: packoffset( c0 );
 	matrix		g_mWorld				: packoffset( c4 );
-    float4      g_vCameraPos            : packoffset( c8) ;
+	matrix		g_mWorldView            : packoffset( c8 );
+    float4      g_vCameraPos            : packoffset( c12) ;
 };
 
 //--------------------------------------------------------------------------------------
@@ -29,6 +30,7 @@ struct VS_INPUT
 struct VS_OUTPUT
 {
 	float3 vViewVector  : VIEWVECTOR;
+    float3 vPositionView : POSITION_VIEW;
 	float3 vNormal		: NORMAL;
 	float2 vTexcoord	: TEXCOORD0;
 	float4 vPosition	: SV_POSITION;
@@ -41,7 +43,8 @@ VS_OUTPUT VSMain( VS_INPUT Input )
 {
 	VS_OUTPUT Output;
 	
-	Output.vViewVector = normalize((g_vCameraPos - mul(Input.vPosition, g_mWorld).xyz));
+	Output.vViewVector = normalize((g_vCameraPos.xyz - mul(Input.vPosition, g_mWorld).xyz));
+	Output.vPositionView = mul( Input.vPosition, g_mWorldView).xyz;
 	Output.vPosition = mul( Input.vPosition, g_mWorldViewProjection );
 	Output.vNormal = mul( Input.vNormal, (float3x3)g_mWorld );
 	Output.vTexcoord = Input.vTexcoord;
