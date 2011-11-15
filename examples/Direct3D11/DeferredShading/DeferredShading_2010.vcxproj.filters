@@ -113,6 +113,8 @@
     <ClCompile Include="DeferredShading.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="DeferredShading.spark" />
+    <CustomBuild Include="DeferredShading.spark">
+      <Filter>Shaders</Filter>
+    </CustomBuild>
   </ItemGroup>
 </Project>

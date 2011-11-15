@@ -131,6 +131,135 @@ void RenderText();
 // SPARK:
 void FinalizeApp();
 
+
+// DS
+#if 0
+void RenderGBuffer(ID3D11DeviceContext* d3dDeviceContext,
+                        CDXUTSDKMesh& mesh_opaque,
+                        CDXUTSDKMesh& mesh_alpha,
+                        const CFirstPersonCamera* viewerCamera,
+                        const D3D11_VIEWPORT* viewport,
+                        const UIConstants* ui)
+{
+    // Clear GBuffer
+    // NOTE: We actually only need to clear the depth buffer here since we replace unwritten (i.e. far plane) samples
+    // with the skybox. We use the depth buffer to reconstruct position and only in-frustum positions are shaded.
+    // NOTE: Complementary Z buffer: clear to 0 (far)!
+    d3dDeviceContext->ClearDepthStencilView(mDepthBuffer->GetDepthStencil(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 0.0f, 0);
+
+    d3dDeviceContext->IASetInputLayout(g_pVertexLayout11);
+
+    d3dDeviceContext->VSSetConstantBuffers(0, 1, &mPerFrameConstants);
+    d3dDeviceContext->VSSetShader(mGeometryVS->GetShader(), 0, 0);
+    
+    d3dDeviceContext->GSSetShader(0, 0, 0);
+
+    d3dDeviceContext->RSSetViewports(1, viewport);
+
+    d3dDeviceContext->PSSetConstantBuffers(0, 1, &mPerFrameConstants);
+    d3dDeviceContext->PSSetSamplers(0, 1, &mDiffuseSampler);
+    // Diffuse texture set per-material by DXUT mesh routines
+
+    // Set up render GBuffer render targets
+    d3dDeviceContext->OMSetDepthStencilState(mDepthState, 0);
+    d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), &mGBufferRTV.front(), mDepthBuffer->GetDepthStencil());
+    d3dDeviceContext->OMSetBlendState(mGeometryBlendState, 0, 0xFFFFFFFF);
+    
+    // Render opaque geometry
+    if (mesh_opaque.IsLoaded()) {
+        d3dDeviceContext->RSSetState(mRasterizerState);
+        d3dDeviceContext->PSSetShader(mGBufferPS->GetShader(), 0, 0);
+        mesh_opaque.Render(d3dDeviceContext, 0);
+    }
+
+    // Render alpha tested geometry
+    if (mesh_alpha.IsLoaded()) {
+        d3dDeviceContext->RSSetState(mDoubleSidedRasterizerState);
+        d3dDeviceContext->PSSetShader(mGBufferAlphaTestPS->GetShader(), 0, 0);
+        mesh_alpha.Render(d3dDeviceContext, 0);
+    }
+
+    // Cleanup (aka make the runtime happy)
+    d3dDeviceContext->OMSetRenderTargets(0, 0, 0);
+
+    if (mSaveNextRenderState) {
+        const unsigned int bufferSize = 1024;
+        wchar_t fileName[bufferSize];
+        for (size_t i = 0; i < mGBufferSRV.size(); ++i) {
+            swprintf(fileName, bufferSize, L"%s_g%d.dds", kRenderStateFileNamePrefix, i);
+            SaveTexture(d3dDeviceContext, mGBufferSRV[i], fileName);
+        }
+    }
+}
+
+void SaveTexture(ID3D11DeviceContext* d3dDeviceContext, ID3D11ShaderResourceView* resourceView, wchar_t *fileName)
+{
+    // NOTE: This path does not need to be fast so we create/destroy resources on the fly 
+    ID3D11Device* d3dDevice = DXUTGetD3D11Device();
+
+    // Use the SRV description for the format
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+    resourceView->GetDesc(&srvDesc);
+
+    DXGI_FORMAT format = srvDesc.Format;
+    // Fix depth/stencil formats (remove stencil)...
+    switch (format) {
+    case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
+        format = DXGI_FORMAT_R32_FLOAT;
+        break;
+    };
+
+    // Grab the underlying Texture2D description... assume all this works for now
+    ID3D11Resource *resource;
+    resourceView->GetResource(&resource);
+    ID3D11Texture2D *texture;
+    resource->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&texture);
+    SAFE_RELEASE(resource);
+    D3D11_TEXTURE2D_DESC texDesc;
+    texture->GetDesc(&texDesc);
+    SAFE_RELEASE(texture);
+
+    // To handle MSAA we first copy each sample to a vertical column of images
+    unsigned int flatTextureHeight = texDesc.Height * texDesc.SampleDesc.Count;
+    std::tr1::shared_ptr<Texture2D> flatTexture = std::tr1::shared_ptr<Texture2D>(
+        new Texture2D(d3dDevice, texDesc.Width, flatTextureHeight, format));
+
+    // Can't directly copy individual samples so we need a render pass for each sample
+    // Full screen triangle setup
+    d3dDeviceContext->IASetInputLayout(0);
+    d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    d3dDeviceContext->IASetVertexBuffers(0, 0, 0, 0, 0);
+
+    d3dDeviceContext->VSSetShader(mFullScreenTriangleVS->GetShader(), 0, 0);
+    d3dDeviceContext->GSSetShader(0, 0, 0);
+
+    d3dDeviceContext->RSSetState(mRasterizerState);
+    
+    d3dDeviceContext->PSSetShaderResources(0, 1, &resourceView);
+    d3dDeviceContext->PSSetShader(mSaveFlatResourcePS->GetShader(), 0, 0);
+    
+    ID3D11RenderTargetView * renderTargets[1] = {flatTexture->GetRenderTarget()};
+    d3dDeviceContext->OMSetRenderTargets(1, renderTargets, 0);
+    d3dDeviceContext->OMSetBlendState(mGeometryBlendState, 0, 0xFFFFFFFF);
+
+    // Copy each sample into column
+    D3D11_VIEWPORT viewport;
+    viewport.TopLeftX = 0.0f;
+    viewport.Width = float(texDesc.Width);
+    viewport.TopLeftY = 0.0f;
+    viewport.Height = float(flatTextureHeight);
+    viewport.MinDepth = 0.0f;
+    viewport.MaxDepth = 1.0f;
+
+    d3dDeviceContext->RSSetViewports(1, &viewport);
+    d3dDeviceContext->Draw(3, 0);
+
+    D3DX11SaveTextureToFile(d3dDeviceContext, flatTexture->GetTexture(), D3DX11_IFF_DDS, fileName);
+
+    // Cleanup
+    d3dDeviceContext->OMSetRenderTargets(0, 0, 0);
+}
+#endif
 //--------------------------------------------------------------------------------------
 // Entry point to the program. Initializes everything and goes into a message processing 
 // loop. Idle time is used to render the scene.
@@ -634,6 +763,8 @@ static spark::float3 Convert( const D3DXVECTOR3& v )
     return *reinterpret_cast<const spark::float3*>(&v);
 }
 
+void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice );
+
 //--------------------------------------------------------------------------------------
 // Render the scene using the D3D11 device
 //--------------------------------------------------------------------------------------
@@ -647,178 +778,8 @@ void CALLBACK OnD3D11FrameRender( ID3D11Device* pd3dDevice, ID3D11DeviceContext*
         return;
     }
 
-    // Clear the render target and depth stencil
-    float ClearColor[4] = { 0.0f, 0.25f, 0.25f, 0.55f };
-    ID3D11RenderTargetView* pRTV = DXUTGetD3D11RenderTargetView();
-    pd3dImmediateContext->ClearRenderTargetView( pRTV, ClearColor );
-    ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
-    pd3dImmediateContext->ClearDepthStencilView( pDSV, D3D11_CLEAR_DEPTH, 1.0, 0 );
+    RenderForward(pd3dImmediateContext, pd3dDevice);
 
-
-    // Common:
-    D3DXVECTOR3 vLightDir;
-    D3DXMATRIX mWorld;
-    D3DXMATRIX mView;
-    D3DXMATRIX mProj;
-
-    // Get the projection & view matrix from the camera class
-    mProj = *g_Camera.GetProjMatrix();
-    mView = *g_Camera.GetViewMatrix();
-    D3DXVECTOR3 vCameraPos = *g_Camera.GetEyePt();
-
-    // Get the light direction
-    vLightDir = g_LightControl.GetLightDirection();
-
-    float fAmbient = 0.1f;
-
-    mWorld = g_mCenterMesh * *g_Camera.GetWorldMatrix();
-    mProj = *g_Camera.GetProjMatrix();
-    mView = *g_Camera.GetViewMatrix();
-
-
-    // D3D11:
-    if(!gUseSpark)
-    {
-        HRESULT hr;
-
-        // Per frame cb update
-        D3D11_MAPPED_SUBRESOURCE MappedResource;
-        V( pd3dImmediateContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
-        CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
-        pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
-        pd3dImmediateContext->Unmap( g_pcbPSPerFrame, 0 );
-
-        pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
-
-        //Get the mesh
-        //IA setup
-        pd3dImmediateContext->IASetInputLayout( g_pVertexLayout11 );
-        UINT Strides[1];
-        UINT Offsets[1];
-        ID3D11Buffer* pVB[1];
-        pVB[0] = g_Mesh11.GetVB11( 0, 0 );
-        Strides[0] = ( UINT )g_Mesh11.GetVertexStride( 0, 0 );
-        Offsets[0] = 0;
-        pd3dImmediateContext->IASetVertexBuffers( 0, 1, pVB, Strides, Offsets );
-        pd3dImmediateContext->IASetIndexBuffer( g_Mesh11.GetIB11( 0 ), g_Mesh11.GetIBFormat11( 0 ), 0 );
-
-        // Set the shaders
-        pd3dImmediateContext->VSSetShader( g_pVertexShader, NULL, 0 );
-        pd3dImmediateContext->PSSetShader( g_pPixelShader, NULL, 0 );
-    
-        // Set the per object constant data
-        mWorld = g_mCenterMesh * *g_Camera.GetWorldMatrix();
-        mProj = *g_Camera.GetProjMatrix();
-        mView = *g_Camera.GetViewMatrix();
-
-        D3DXMATRIX mWorldViewProjection;
-        mWorldViewProjection = mWorld * mView * mProj;
-        
-        // VS Per object
-        V( pd3dImmediateContext->Map( g_pcbVSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
-        CB_VS_PER_OBJECT* pVSPerObject = ( CB_VS_PER_OBJECT* )MappedResource.pData;
-        D3DXMatrixTranspose( &pVSPerObject->m_WorldViewProj, &mWorldViewProjection );
-        D3DXMatrixTranspose( &pVSPerObject->m_World, &mWorld );
-        pd3dImmediateContext->Unmap( g_pcbVSPerObject, 0 );
-        pVSPerObject->m_vCameraPos = D3DXVECTOR4(*g_Camera.GetEyePt(), 1.0f);
-
-        pd3dImmediateContext->VSSetConstantBuffers( g_iCBVSPerObjectBind, 1, &g_pcbVSPerObject );
-
-        // PS Per object
-        V( pd3dImmediateContext->Map( g_pcbPSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
-        CB_PS_PER_OBJECT* pPSPerObject = ( CB_PS_PER_OBJECT* )MappedResource.pData;
-        pPSPerObject->m_vObjectColor = D3DXVECTOR4( 1, 1, 1, 1 );
-        pd3dImmediateContext->Unmap( g_pcbPSPerObject, 0 );
-
-        pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
-
-        //Render
-        SDKMESH_SUBSET* pSubset = NULL;
-        D3D11_PRIMITIVE_TOPOLOGY PrimType;
-
-        pd3dImmediateContext->PSSetSamplers( 0, 1, &g_pSamLinear );
-
-        for( UINT subset = 0; subset < g_Mesh11.GetNumSubsets( 0 ); ++subset )
-        {
-            // Get the subset
-            pSubset = g_Mesh11.GetSubset( 0, subset );
-
-            PrimType = CDXUTSDKMesh::GetPrimitiveType11( ( SDKMESH_PRIMITIVE_TYPE )pSubset->PrimitiveType );
-            pd3dImmediateContext->IASetPrimitiveTopology( PrimType );
-
-            // TODO: D3D11 - material loading
-            ID3D11ShaderResourceView* pDiffuseRV = g_Mesh11.GetMaterial( pSubset->MaterialID )->pDiffuseRV11;
-            pd3dImmediateContext->PSSetShaderResources( 0, 1, &pDiffuseRV );
-
-            pd3dImmediateContext->DrawIndexed( ( UINT )pSubset->IndexCount, 0, ( UINT )pSubset->VertexStart );
-        }
-
-    }
-    else
-    {
-        // SPARK:
-
-        // Set color and depth/stencil targets
-        gShaderInstance->SetMyTarget( pRTV );
-        gShaderInstance->SetDepthStencilView( pDSV );
-
-        // Set various uniform inputs
-        gShaderInstance->SetWorld( Convert( mWorld ) );
-        gShaderInstance->SetView( Convert( mView ) );
-        gShaderInstance->SetProj( Convert( mProj ) );
-        gShaderInstance->SetObjectColor( spark::float4(1, 1, 1, 1) );
-        gShaderInstance->SetLightDir( Convert(vLightDir) );
-        gShaderInstance->SetAmbient( fAmbient );
-        gShaderInstance->SetLinearSampler( g_pSamLinear );
-        gShaderInstance->SetCameraPos(Convert(vCameraPos));
-
-        // Set up the vertex stream
-        ID3D11Buffer* vb = g_Mesh11.GetVB11( 0, 0 );
-        UINT vbOffset = 0;
-        UINT vbStride = g_Mesh11.GetVertexStride( 0, 0 );
-        gShaderInstance->SetMyVertexStream(
-            spark::d3d11::VertexStream(
-                vb, vbOffset, vbStride ) );
-
-        // Create the index stream (part of the DrawSpan)
-        ID3D11Buffer* ib = g_Mesh11.GetIB11( 0 );
-        DXGI_FORMAT ibFormat = g_Mesh11.GetIBFormat11( 0 );
-        UINT ibOffset = 0;
-        spark::d3d11::IndexStream indexStream(
-            ib, ibFormat, ibOffset );
-
-        // For each subset...
-        for( UINT subset = 0; subset < g_Mesh11.GetNumSubsets( 0 ); ++subset )
-        {
-            // Get the subset
-            SDKMESH_SUBSET* pSubset = g_Mesh11.GetSubset( 0, subset );
-
-            // Set up draw span, now that we know the number and
-            // type of primitives to render.
-            D3D11_PRIMITIVE_TOPOLOGY primTopo =
-                CDXUTSDKMesh::GetPrimitiveType11( ( SDKMESH_PRIMITIVE_TYPE )pSubset->PrimitiveType );
-            spark::d3d11::DrawSpan drawSpan =
-                spark::d3d11::IndexedDrawSpan(
-                    primTopo,
-                    indexStream,
-                    (UINT)pSubset->IndexCount,
-                    (UINT)pSubset->IndexStart,
-                    (UINT)pSubset->VertexStart);
-            gShaderInstance->SetMyDrawSpan( drawSpan );
-
-            // Set the diffuse texture from the subset material
-            ID3D11ShaderResourceView* diffuseTexture =
-                g_Mesh11.GetMaterial( pSubset->MaterialID )->pDiffuseRV11;
-            gShaderInstance->SetDiffuseTexture( diffuseTexture );
-
-            // Submit a rendering operation using this configuration
-            gShaderInstance->Submit( pd3dDevice, pd3dImmediateContext );
-        }
-
-        // Restore color and depth/stencil targets to what the D3D code expects
-        pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
-
-    }
 
     DXUT_BeginPerfEvent( DXUT_PERFEVENTCOLOR, L"HUD / Stats" );
     g_HUD.OnRender( fElapsedTime );
@@ -863,6 +824,193 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
 
     // SPARK:
     SAFE_RELEASE( gShaderInstance );
+}
+
+void RenderForwardHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, ID3D11VertexShader *pVS, ID3D11PixelShader *pPS );
+
+void RenderForwardSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, float fAmbient, D3DXVECTOR3 vCameraPos, ID3D11Device* pd3dDevice, ID3D11DeviceContext* pd3dImmediateContext );
+
+void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice )
+{
+    // Clear the render target and depth stencil
+    float ClearColor[4] = { 0.0f, 0.25f, 0.25f, 0.55f };
+    ID3D11RenderTargetView* pRTV = DXUTGetD3D11RenderTargetView();
+    pd3dImmediateContext->ClearRenderTargetView( pRTV, ClearColor );
+    ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
+    pd3dImmediateContext->ClearDepthStencilView( pDSV, D3D11_CLEAR_DEPTH, 1.0, 0 );
+
+
+    // Common:
+    D3DXVECTOR3 vLightDir;
+    D3DXMATRIX mWorld;
+    D3DXMATRIX mView;
+    D3DXMATRIX mProj;
+
+    // Get the projection & view matrix from the camera class
+    mProj = *g_Camera.GetProjMatrix();
+    mView = *g_Camera.GetViewMatrix();
+    D3DXVECTOR3 vCameraPos = *g_Camera.GetEyePt();
+
+    // Get the light direction
+    vLightDir = g_LightControl.GetLightDirection();
+
+    float fAmbient = 0.1f;
+
+    mWorld = g_mCenterMesh * *g_Camera.GetWorldMatrix();
+    mProj = *g_Camera.GetProjMatrix();
+    mView = *g_Camera.GetViewMatrix();
+
+
+    // D3D11:
+    if(!gUseSpark)
+    {
+        RenderForwardHLSL(pd3dImmediateContext, vLightDir, fAmbient, mWorld, mProj, mView, g_pVertexShader, g_pPixelShader);
+    }
+    else
+    {
+        // SPARK:
+        RenderForwardSpark(pRTV, pDSV, mWorld, mView, mProj, vLightDir, fAmbient, vCameraPos, pd3dDevice, pd3dImmediateContext);
+    }
+}
+
+void RenderForwardHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, ID3D11VertexShader *pVS, ID3D11PixelShader *pPS )
+{
+    HRESULT hr;
+
+    // Per frame cb update
+    D3D11_MAPPED_SUBRESOURCE MappedResource;
+    V( pd3dImmediateContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
+    CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
+    pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
+    pd3dImmediateContext->Unmap( g_pcbPSPerFrame, 0 );
+
+    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
+
+    //Get the mesh
+    //IA setup
+    pd3dImmediateContext->IASetInputLayout( g_pVertexLayout11 );
+    UINT Strides[1];
+    UINT Offsets[1];
+    ID3D11Buffer* pVB[1];
+    pVB[0] = g_Mesh11.GetVB11( 0, 0 );
+    Strides[0] = ( UINT )g_Mesh11.GetVertexStride( 0, 0 );
+    Offsets[0] = 0;
+    pd3dImmediateContext->IASetVertexBuffers( 0, 1, pVB, Strides, Offsets );
+    pd3dImmediateContext->IASetIndexBuffer( g_Mesh11.GetIB11( 0 ), g_Mesh11.GetIBFormat11( 0 ), 0 );
+
+    // Set the shaders
+    pd3dImmediateContext->VSSetShader( pVS, NULL, 0 );
+    pd3dImmediateContext->PSSetShader( pPS, NULL, 0 );
+
+    // Set the per object constant data
+    mWorld = g_mCenterMesh * *g_Camera.GetWorldMatrix();
+    mProj = *g_Camera.GetProjMatrix();
+    mView = *g_Camera.GetViewMatrix();
+
+    D3DXMATRIX mWorldViewProjection;
+    mWorldViewProjection = mWorld * mView * mProj;
+
+    // VS Per object
+    V( pd3dImmediateContext->Map( g_pcbVSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
+    CB_VS_PER_OBJECT* pVSPerObject = ( CB_VS_PER_OBJECT* )MappedResource.pData;
+    D3DXMatrixTranspose( &pVSPerObject->m_WorldViewProj, &mWorldViewProjection );
+    D3DXMatrixTranspose( &pVSPerObject->m_World, &mWorld );
+    pd3dImmediateContext->Unmap( g_pcbVSPerObject, 0 );
+    pVSPerObject->m_vCameraPos = D3DXVECTOR4(*g_Camera.GetEyePt(), 1.0f);
+
+    pd3dImmediateContext->VSSetConstantBuffers( g_iCBVSPerObjectBind, 1, &g_pcbVSPerObject );
+
+    // PS Per object
+    V( pd3dImmediateContext->Map( g_pcbPSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
+    CB_PS_PER_OBJECT* pPSPerObject = ( CB_PS_PER_OBJECT* )MappedResource.pData;
+    pPSPerObject->m_vObjectColor = D3DXVECTOR4( 1, 1, 1, 1 );
+    pd3dImmediateContext->Unmap( g_pcbPSPerObject, 0 );
+
+    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
+
+    //Render
+    SDKMESH_SUBSET* pSubset = NULL;
+    D3D11_PRIMITIVE_TOPOLOGY PrimType;
+
+    pd3dImmediateContext->PSSetSamplers( 0, 1, &g_pSamLinear );
+
+    for( UINT subset = 0; subset < g_Mesh11.GetNumSubsets( 0 ); ++subset )
+    {
+        // Get the subset
+        pSubset = g_Mesh11.GetSubset( 0, subset );
+
+        PrimType = CDXUTSDKMesh::GetPrimitiveType11( ( SDKMESH_PRIMITIVE_TYPE )pSubset->PrimitiveType );
+        pd3dImmediateContext->IASetPrimitiveTopology( PrimType );
+
+        // TODO: D3D11 - material loading
+        ID3D11ShaderResourceView* pDiffuseRV = g_Mesh11.GetMaterial( pSubset->MaterialID )->pDiffuseRV11;
+        pd3dImmediateContext->PSSetShaderResources( 0, 1, &pDiffuseRV );
+
+        pd3dImmediateContext->DrawIndexed( ( UINT )pSubset->IndexCount, 0, ( UINT )pSubset->VertexStart );
+    }
+}
+
+void RenderForwardSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, float fAmbient, D3DXVECTOR3 vCameraPos, ID3D11Device* pd3dDevice, ID3D11DeviceContext* pd3dImmediateContext )
+{
+    // Set color and depth/stencil targets
+    gShaderInstance->SetMyTarget( pRTV );
+    gShaderInstance->SetDepthStencilView( pDSV );
+
+    // Set various uniform inputs
+    gShaderInstance->SetWorld( Convert( mWorld ) );
+    gShaderInstance->SetView( Convert( mView ) );
+    gShaderInstance->SetProj( Convert( mProj ) );
+    gShaderInstance->SetObjectColor( spark::float4(1, 1, 1, 1) );
+    gShaderInstance->SetLightDir( Convert(vLightDir) );
+    gShaderInstance->SetAmbient( fAmbient );
+    gShaderInstance->SetLinearSampler( g_pSamLinear );
+    gShaderInstance->SetCameraPos(Convert(vCameraPos));
+
+    // Set up the vertex stream
+    ID3D11Buffer* vb = g_Mesh11.GetVB11( 0, 0 );
+    UINT vbOffset = 0;
+    UINT vbStride = g_Mesh11.GetVertexStride( 0, 0 );
+    gShaderInstance->SetMyVertexStream(
+        spark::d3d11::VertexStream(
+        vb, vbOffset, vbStride ) );
+
+    // Create the index stream (part of the DrawSpan)
+    ID3D11Buffer* ib = g_Mesh11.GetIB11( 0 );
+    DXGI_FORMAT ibFormat = g_Mesh11.GetIBFormat11( 0 );
+    UINT ibOffset = 0;
+    spark::d3d11::IndexStream indexStream(
+        ib, ibFormat, ibOffset );
+
+    // For each subset...
+    for( UINT subset = 0; subset < g_Mesh11.GetNumSubsets( 0 ); ++subset )
+    {
+        // Get the subset
+        SDKMESH_SUBSET* pSubset = g_Mesh11.GetSubset( 0, subset );
+
+        // Set up draw span, now that we know the number and
+        // type of primitives to render.
+        D3D11_PRIMITIVE_TOPOLOGY primTopo =
+            CDXUTSDKMesh::GetPrimitiveType11( ( SDKMESH_PRIMITIVE_TYPE )pSubset->PrimitiveType );
+        spark::d3d11::DrawSpan drawSpan =
+            spark::d3d11::IndexedDrawSpan(
+            primTopo,
+            indexStream,
+            (UINT)pSubset->IndexCount,
+            (UINT)pSubset->IndexStart,
+            (UINT)pSubset->VertexStart);
+        gShaderInstance->SetMyDrawSpan( drawSpan );
+
+        // Set the diffuse texture from the subset material
+        ID3D11ShaderResourceView* diffuseTexture =
+            g_Mesh11.GetMaterial( pSubset->MaterialID )->pDiffuseRV11;
+        gShaderInstance->SetDiffuseTexture( diffuseTexture );
+
+        // Submit a rendering operation using this configuration
+        gShaderInstance->Submit( pd3dDevice, pd3dImmediateContext );
+    }
+
+    // Restore color and depth/stencil targets to what the D3D code expects
+    pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
 }
 
 
