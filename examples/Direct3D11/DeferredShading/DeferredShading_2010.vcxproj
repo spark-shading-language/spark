@@ -176,10 +176,10 @@ xcopy "$(ProjectDir)\..\..\..\bin\$(PlatformShortName)\$(Configuration)\SparkCPP
     <CustomBuild Include="DeferredShading.spark">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)\..\..\..\bin\$(PlatformShortName)\$(Configuration)\sparkc.exe" DeferredShading.spark</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">DeferredShading.h;DeferredShading.cpp</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">DeferredShading.spark.h;DeferredShading.spark.cpp</Outputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)\..\..\..\bin\$(PlatformShortName)\$(Configuration)\sparkc.exe</AdditionalInputs>
       <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)\..\..\..\bin\$(PlatformShortName)\$(Configuration)\sparkc.exe" DeferredShading.spark</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">DeferredShading.h;DeferredShading.cpp</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">DeferredShading.spark.h;DeferredShading.spark.cpp</Outputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(ProjectDir)\..\..\..\bin\$(PlatformShortName)\$(Configuration)\sparkc.exe</AdditionalInputs>
       <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">sparkc %(Identity)</Message>
       <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">sparkc %(Identity)</Message>
