@@ -48,9 +48,12 @@ ID3D11InputLayout*          g_pVertexLayout11 = NULL;
 ID3D11Buffer*               g_pVertexBuffer = NULL;
 ID3D11Buffer*               g_pIndexBuffer = NULL;
 ID3D11VertexShader*         g_pVertexShader = NULL;
+ID3D11VertexShader*         gFullScreenTriangleVS = NULL;
+
 ID3D11PixelShader*          gForwardPS = NULL;
 ID3D11SamplerState*         g_pSamLinear = NULL;
 ID3D11PixelShader*          gGBufferPS = NULL;
+ID3D11PixelShader*          gLightPS = NULL;
 
 // DS
 bool gUseDeferred  = false;
@@ -91,6 +94,7 @@ UINT                        g_iCBPSPerObjectBind = 0;
 
 struct CB_PS_PER_FRAME
 {
+    D3DXMATRIX  m_CameraProj;
     D3DXVECTOR4 m_vLightDirAmbient;
 };
 UINT                        g_iCBPSPerFrameBind = 1;
@@ -568,16 +572,21 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
 
     // Compile the shaders to a model based on the feature level we acquired
     ID3DBlob* pVertexShaderBuffer = NULL;
+    ID3DBlob* pFullScreenVSBuffer = NULL;
+
     ID3DBlob* pForwardPSBuffer = NULL;
     ID3DBlob* pGBufferPSBuffer = NULL;
+    ID3DBlob* pLightPSBuffer = NULL;
   
     switch( DXUTGetD3D11DeviceFeatureLevel() )
     {
         case D3D_FEATURE_LEVEL_11_0:
            {
             V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_5_0", &pVertexShaderBuffer ) );
+            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "FullScreenTriangleVS", "vs_5_0", &pFullScreenVSBuffer ) );
             V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_5_0", &pForwardPSBuffer ) );
             V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "GBufferPS", "ps_5_0", &pGBufferPSBuffer ) );
+            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "LightPS", "ps_5_0", &pLightPSBuffer) );
             break;
            }
 //        case D3D_FEATURE_LEVEL_10_1:
@@ -610,10 +619,14 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     // Create the shaders
     V_RETURN( pd3dDevice->CreateVertexShader( pVertexShaderBuffer->GetBufferPointer(),
                                               pVertexShaderBuffer->GetBufferSize(), NULL, &g_pVertexShader ) );
+    V_RETURN( pd3dDevice->CreateVertexShader( pFullScreenVSBuffer->GetBufferPointer(),
+                                              pFullScreenVSBuffer->GetBufferSize(), NULL, &gFullScreenTriangleVS) );
     V_RETURN( pd3dDevice->CreatePixelShader( pForwardPSBuffer->GetBufferPointer(),
                                              pForwardPSBuffer->GetBufferSize(), NULL, &gForwardPS ) );
     V_RETURN( pd3dDevice->CreatePixelShader( pGBufferPSBuffer->GetBufferPointer(),
                                              pGBufferPSBuffer->GetBufferSize(), NULL, &gGBufferPS) );
+    V_RETURN( pd3dDevice->CreatePixelShader( pLightPSBuffer->GetBufferPointer(),
+                                             pLightPSBuffer->GetBufferSize(), NULL, &gLightPS) );
 
     // Create our vertex input layout
     const D3D11_INPUT_ELEMENT_DESC layout[] =
@@ -778,12 +791,60 @@ static spark::float3 Convert( const D3DXVECTOR3& v )
 
 void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice );
 
+void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device* pd3dDevice ) 
+{
+    // Clear
+//    const float zeros[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+//    d3dDeviceContext->ClearRenderTargetView(mLitBufferPS->GetRenderTarget(), zeros);
+        
+    // Full screen triangle setup
+    d3dDeviceContext->IASetInputLayout(0);
+    d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    d3dDeviceContext->IASetVertexBuffers(0, 0, 0, 0, 0);
+
+    d3dDeviceContext->VSSetShader(gFullScreenTriangleVS, 0, 0);
+    d3dDeviceContext->GSSetShader(0, 0, 0);
+
+//    d3dDeviceContext->RSSetState(mRasterizerState);
+//    d3dDeviceContext->RSSetViewports(1, viewport);
+
+//    d3dDeviceContext->PSSetConstantBuffers(0, 1, &mPerFrameConstants);
+    d3dDeviceContext->PSSetShaderResources(0, static_cast<UINT>(mGBufferSRV.size()), &mGBufferSRV.front());
+//    d3dDeviceContext->PSSetShaderResources(5, 1, &lightBufferSRV);
+
+    // Additively blend into back buffer
+//    ID3D11RenderTargetView * renderTargets[1] = {mLitBufferPS->GetRenderTarget()};
+//    d3dDeviceContext->OMSetRenderTargets(1, renderTargets, mDepthBufferReadOnlyDSV);
+//    d3dDeviceContext->OMSetBlendState(mLightingBlendState, 0, 0xFFFFFFFF);
+
+    // Do pixel frequency shading
+        // Get the light direction
+    D3DXVECTOR3 vLightDir = g_LightControl.GetLightDirection();
+
+    float fAmbient = 0.1f;
+
+    D3D11_MAPPED_SUBRESOURCE MappedResource;
+    d3dDeviceContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource );
+    CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
+    pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
+    d3dDeviceContext->Unmap( g_pcbPSPerFrame, 0 );
+
+    d3dDeviceContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
+
+    d3dDeviceContext->PSSetShader(gLightPS, 0, 0);
+//    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
+    d3dDeviceContext->Draw(3, 0);
+
+}
+
 void RenderDeferred( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice ) 
 {
     RenderGBuffer(pd3dImmediateContext, pd3dDevice);
     auto pDSV = DXUTGetD3D11DepthStencilView();
     auto pRTV = DXUTGetD3D11RenderTargetView();
     pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
+
+    RenderDeferredLighting(pd3dImmediateContext, pd3dDevice);
 }
 
 //--------------------------------------------------------------------------------------
@@ -847,8 +908,11 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
     SAFE_RELEASE( g_pVertexBuffer );
     SAFE_RELEASE( g_pIndexBuffer );
     SAFE_RELEASE( g_pVertexShader );
+    SAFE_RELEASE( gFullScreenTriangleVS);
     SAFE_RELEASE( gForwardPS );
     SAFE_RELEASE( g_pSamLinear );
+    SAFE_RELEASE( gGBufferPS );
+    SAFE_RELEASE( gLightPS);
 
     SAFE_RELEASE( g_pcbVSPerObject );
     SAFE_RELEASE( g_pcbPSPerObject );
