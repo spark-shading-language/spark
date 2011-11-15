@@ -45,7 +45,7 @@ float4 PSMain( PS_INPUT Input ) : SV_TARGET
 	
 	float fLighting = saturate( dot( g_vLightDir, Input.vNormal ) );
 	fLighting = max( fLighting, g_fAmbient );
-	//return vDiffuse * fLighting;
+	return vDiffuse * fLighting;
 
     float3 vView = normalize(Input.vViewVector);
     float3 vNormal = normalize(Input.vNormal);
