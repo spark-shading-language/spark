@@ -1,0 +1,94 @@
+// Copyright 2011 Intel Corporation
+// All Rights Reserved
+//
+// Permission is granted to use, copy, distribute and prepare derivative works of this
+// software for any purpose and without fee, provided, that the above copyright notice
+// and this statement appear in all copies.  Intel makes no representations about the
+// suitability of this software for any purpose.  THIS SOFTWARE IS PROVIDED "AS IS."
+// INTEL SPECIFICALLY DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, AND ALL LIABILITY,
+// INCLUDING CONSEQUENTIAL AND OTHER INDIRECT DAMAGES, FOR THE USE OF THIS SOFTWARE,
+// INCLUDING LIABILITY FOR INFRINGEMENT OF ANY PROPRIETARY RIGHTS, AND INCLUDING THE
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  Intel does not
+// assume any responsibility for any errors which may appear in this software nor any
+// responsibility to update it.
+
+// BasicSpark11.spark
+
+shader class BasicSpark11 extends D3D11DrawPass
+{
+    // @Uniform
+    // 
+    input @Uniform float4x4          world;
+    input @Uniform float4x4          view;
+    input @Uniform float4x4          proj;
+    input @Uniform float4            objectColor;
+    input @Uniform float3            lightDir;
+    input @Uniform float             ambient;
+    input @Uniform Texture2D[float4] diffuseTexture;
+    input @Uniform SamplerState      linearSampler;
+    input @Uniform float3            cameraPos;
+
+    @Uniform float4x4 viewProj      = mul( view, proj );
+    @Uniform float4x4 worldViewProj = mul( world, viewProj );
+
+    // @AssembledVertex
+    //
+    struct PNU
+    {
+        float3 position;
+        float3 normal;
+        float2 texCoord;
+    }
+    input @Uniform VertexStream[PNU] myVertexStream;
+
+    @AssembledVertex PNU    fetched  = myVertexStream( IA_VertexID );
+    @AssembledVertex float3 P_model  = fetched.position;
+    @AssembledVertex float3 N_model  = fetched.normal;
+    @AssembledVertex float2 texCoord = fetched.texCoord;
+
+    input @Uniform DrawSpan myDrawSpan;
+    override IA_DrawSpan = myDrawSpan;
+    
+    // @Constant
+    //
+    @Constant float4 colSpecular = float4(1.0f, 1.0f, 1.0f, 1.0f);
+    @Constant float4 lightSpecular = 0.1 * float4(1.0f, 1.0f, 1.0f, 1.0f);
+
+    // @Uniform 
+    //
+    @Fragment float3 vLightDirNorm = normalize(lightDir);
+
+    // @CoarseVertex
+    //
+    @CoarseVertex float3 N_world = mul(N_model, float3x3(world));
+    @CoarseVertex float3 viewVec = normalize(cameraPos - mul(float4(P_model, 1.0f), world).xyz);
+
+    // @RasterVertex
+    //
+    override RS_Position = mul(float4(P_model, 1.0f), worldViewProj);
+
+    // @Fragment
+    //
+    @Fragment float4 diffuse  = Sample(diffuseTexture, linearSampler, texCoord);
+    @Fragment float  lighting = max(saturate(dot(lightDir, N_world)), ambient);
+//    @Fragment float4 color    = diffuse * lighting ;
+
+    @Fragment float4 Specular( @Fragment float3 vNormal, @Fragment float3 vView, @Fragment float3 vLightDir)
+    {
+        @Fragment float fNormalDotLight = saturate ( dot(vNormal, vLightDir) );  
+        @Fragment float3 vLightReflect = 2.0 * fNormalDotLight * vNormal - vLightDir;
+        @Fragment float fViewDotReflect = saturate( dot(vView, vLightReflect) );
+        @Fragment float fSpecIntensity1 = pow(fViewDotReflect, 2.0f);
+        @Fragment float4 fSpecIntensity = float4(fSpecIntensity1);
+
+        @Fragment float4 specular = fSpecIntensity * colSpecular * lightSpecular;
+        return specular;
+    }
+
+    @Fragment float4 color = Specular(  normalize(N_world), 
+                                        normalize(viewVec), 
+                                        vLightDirNorm);
+    // @Pixel
+    //
+    output @Pixel float4 myTarget = color;
+}
