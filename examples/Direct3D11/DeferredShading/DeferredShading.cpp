@@ -48,8 +48,9 @@ ID3D11InputLayout*          g_pVertexLayout11 = NULL;
 ID3D11Buffer*               g_pVertexBuffer = NULL;
 ID3D11Buffer*               g_pIndexBuffer = NULL;
 ID3D11VertexShader*         g_pVertexShader = NULL;
-ID3D11PixelShader*          g_pPixelShader = NULL;
+ID3D11PixelShader*          gForwardPS = NULL;
 ID3D11SamplerState*         g_pSamLinear = NULL;
+ID3D11PixelShader*          gGBufferPS = NULL;
 
 // DS
 bool gUseDeferred  = false;
@@ -77,6 +78,7 @@ struct CB_VS_PER_OBJECT
 {
     D3DXMATRIX m_WorldViewProj;
     D3DXMATRIX m_World;
+    D3DXMATRIX m_WorldView;
     D3DXVECTOR4 m_vCameraPos;
 };
 UINT                        g_iCBVSPerObjectBind = 0;
@@ -153,7 +155,7 @@ void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice
 
     d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), &mGBufferRTV.front(), mDepthBuffer->GetDepthStencil());
 
-    RenderScene(d3dDeviceContext, NULL, mDepthBuffer->GetDepthStencil(), pDevice, g_pVertexShader, g_pPixelShader);
+    RenderScene(d3dDeviceContext, NULL, mDepthBuffer->GetDepthStencil(), pDevice, g_pVertexShader, gGBufferPS);
 #if 0
     d3dDeviceContext->IASetInputLayout(g_pVertexLayout11);
 
@@ -566,48 +568,52 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
 
     // Compile the shaders to a model based on the feature level we acquired
     ID3DBlob* pVertexShaderBuffer = NULL;
-    ID3DBlob* pPixelShaderBuffer = NULL;
+    ID3DBlob* pForwardPSBuffer = NULL;
+    ID3DBlob* pGBufferPSBuffer = NULL;
   
     switch( DXUTGetD3D11DeviceFeatureLevel() )
     {
         case D3D_FEATURE_LEVEL_11_0:
            {
             V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_5_0", &pVertexShaderBuffer ) );
-            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_5_0", &pPixelShaderBuffer ) );
+            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_5_0", &pForwardPSBuffer ) );
+            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "GBufferPS", "ps_5_0", &pGBufferPSBuffer ) );
             break;
            }
-        case D3D_FEATURE_LEVEL_10_1:
-           {
-            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_1", &pVertexShaderBuffer ) );
-            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_1", &pPixelShaderBuffer ) );
-            break;
-           }
-        case D3D_FEATURE_LEVEL_10_0:
-           {
-            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_0", &pVertexShaderBuffer ) );
-            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_0", &pPixelShaderBuffer ) );
-            break;
-           }
-        case D3D_FEATURE_LEVEL_9_3:
-           {
-            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_0_level_9_3", &pVertexShaderBuffer ) );
-            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_0_level_9_3", &pPixelShaderBuffer ) );
-            break;
-           }
-        case D3D_FEATURE_LEVEL_9_2: // Shader model 2 fits feature level 9_1
-        case D3D_FEATURE_LEVEL_9_1:
-           {
-            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_0_level_9_1", &pVertexShaderBuffer ) );
-            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_0_level_9_1", &pPixelShaderBuffer ) );
-            break;
-           }
+//        case D3D_FEATURE_LEVEL_10_1:
+//           {
+//            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_1", &pVertexShaderBuffer ) );
+//            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_1", &pForwardPSBuffer ) );
+//            break;
+//           }
+//        case D3D_FEATURE_LEVEL_10_0:
+//           {
+//            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_0", &pVertexShaderBuffer ) );
+//            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_0", &pForwardPSBuffer ) );
+//            break;
+//           }
+//        case D3D_FEATURE_LEVEL_9_3:
+//           {
+//            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_0_level_9_3", &pVertexShaderBuffer ) );
+//            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_0_level_9_3", &pForwardPSBuffer ) );
+//            break;
+//           }
+//        case D3D_FEATURE_LEVEL_9_2: // Shader model 2 fits feature level 9_1
+//        case D3D_FEATURE_LEVEL_9_1:
+//           {
+//            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_0_level_9_1", &pVertexShaderBuffer ) );
+//            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_0_level_9_1", &pForwardPSBuffer ) );
+//            break;
+//           }
     }
 
     // Create the shaders
     V_RETURN( pd3dDevice->CreateVertexShader( pVertexShaderBuffer->GetBufferPointer(),
                                               pVertexShaderBuffer->GetBufferSize(), NULL, &g_pVertexShader ) );
-    V_RETURN( pd3dDevice->CreatePixelShader( pPixelShaderBuffer->GetBufferPointer(),
-                                             pPixelShaderBuffer->GetBufferSize(), NULL, &g_pPixelShader ) );
+    V_RETURN( pd3dDevice->CreatePixelShader( pForwardPSBuffer->GetBufferPointer(),
+                                             pForwardPSBuffer->GetBufferSize(), NULL, &gForwardPS ) );
+    V_RETURN( pd3dDevice->CreatePixelShader( pGBufferPSBuffer->GetBufferPointer(),
+                                             pGBufferPSBuffer->GetBufferSize(), NULL, &gGBufferPS) );
 
     // Create our vertex input layout
     const D3D11_INPUT_ELEMENT_DESC layout[] =
@@ -621,7 +627,8 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
                                              pVertexShaderBuffer->GetBufferSize(), &g_pVertexLayout11 ) );
 
     SAFE_RELEASE( pVertexShaderBuffer );
-    SAFE_RELEASE( pPixelShaderBuffer );
+    SAFE_RELEASE( pForwardPSBuffer );
+    SAFE_RELEASE( pGBufferPSBuffer);
 
     // Load the mesh
     V_RETURN( g_Mesh11.Create( pd3dDevice, L"tiny\\tiny.sdkmesh", true ) );
@@ -840,7 +847,7 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
     SAFE_RELEASE( g_pVertexBuffer );
     SAFE_RELEASE( g_pIndexBuffer );
     SAFE_RELEASE( g_pVertexShader );
-    SAFE_RELEASE( g_pPixelShader );
+    SAFE_RELEASE( gForwardPS );
     SAFE_RELEASE( g_pSamLinear );
 
     SAFE_RELEASE( g_pcbVSPerObject );
@@ -857,7 +864,7 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
     ID3D11RenderTargetView* pRTV = DXUTGetD3D11RenderTargetView();
     ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
 
-    RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, g_pPixelShader);
+    RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, gForwardPS);
 }
 
 void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, ID3D11VertexShader *pVS, ID3D11PixelShader *pPS )
@@ -897,11 +904,15 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
     D3DXMATRIX mWorldViewProjection;
     mWorldViewProjection = mWorld * mView * mProj;
 
+    D3DXMATRIX mWorldView;
+    mWorldView = mWorld * mView ;
+
     // VS Per object
     V( pd3dImmediateContext->Map( g_pcbVSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
     CB_VS_PER_OBJECT* pVSPerObject = ( CB_VS_PER_OBJECT* )MappedResource.pData;
     D3DXMatrixTranspose( &pVSPerObject->m_WorldViewProj, &mWorldViewProjection );
     D3DXMatrixTranspose( &pVSPerObject->m_World, &mWorld );
+    D3DXMatrixTranspose( &pVSPerObject->m_WorldView, &mWorldView );
     pd3dImmediateContext->Unmap( g_pcbVSPerObject, 0 );
     pVSPerObject->m_vCameraPos = D3DXVECTOR4(*g_Camera.GetEyePt(), 1.0f);
 
@@ -1021,7 +1032,7 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     mWorld = g_mCenterMesh * *g_Camera.GetWorldMatrix();
     mProj = *g_Camera.GetProjMatrix();
     mView = *g_Camera.GetViewMatrix();
-
+    
 
     // D3D11:
     if(!gUseSpark)
