@@ -683,6 +683,12 @@ abstract shader class D3D11DrawPass
 	[[Builtin("hlsl", "pow({0}, {1})")]]
 	float3 pow( float3 base, float exponent );
 
+    [[Builtin("hlsl", "ddx_coarse({0})")]]
+    @Fragment float ddx_coarse( @Fragment float value );
+
+    [[Builtin("hlsl", "ddy_coarse({0})")]]
+    @Fragment float ddy_coarse( @Fragment float value );
+
 	[[Builtin("hlsl", "({0}).Sample({1}, {2})")]]
 	@Fragment float3 Sample( @Fragment Texture2D[float3] t, @Fragment SamplerState s, @Fragment float2 v );
 
@@ -715,6 +721,7 @@ abstract shader class D3D11DrawPass
 	[[Builtin("hlsl", "({0}).x")]]	float operator(x)( float3 v );
 	[[Builtin("hlsl", "({0}).y")]]	float operator(y)( float3 v );
 	[[Builtin("hlsl", "({0}).z")]]	float operator(z)( float3 v );
+	[[Builtin("hlsl", "({0}).xy")]]	float2 operator(xy)( float3 v );
 	[[Builtin("hlsl", "({0}).xyzx")]]	float4 operator(xyzx)( float3 v );
 
 	[[Builtin("hlsl", "({0}).x")]]	float operator(x)( float4 v );
@@ -1120,6 +1127,9 @@ abstract shader class D3D11DrawPass
 	int operator(upper)(Range range);
 
     //
+
+	[[Builtin("hlsl", "float4({0}, {1}, {2})")]]
+	float4 float4( float2 xy, float z, float w );
 
 	[[Builtin("hlsl", "float4({0}, {1})")]]
 	float4 float4( float3 xyz, float w );

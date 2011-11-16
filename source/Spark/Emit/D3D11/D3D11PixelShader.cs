@@ -764,7 +764,21 @@ namespace Spark.Emit.D3D11
             {
                 if( !firstParam ) entryPointSpan.WriteLine(",");
                 firstParam = false;
-                entryPointSpan.Write("\tout float4 target{0} : SV_Target{0}", ii);
+
+                var sourceInfo = _renderTargetSources[ii];
+                MidExp exp = null;
+                if (sourceInfo.combinedExp != null)
+                {
+                    // \todo: Validate other bits and bobs!!!
+                    exp = sourceInfo.combinedExp;
+                }
+                else
+                {
+                    throw new NotImplementedException();
+                }
+
+                entryPointSpan.Write("\tout {1} target{0} : SV_Target{0}", ii,
+                    hlslContext.EmitType(exp.Type));
             }
             entryPointSpan.WriteLine(" )");
             entryPointSpan.WriteLine("{");
