@@ -73,7 +73,8 @@ ID3D11DepthStencilView* mDepthBufferReadOnlyDSV;
 // SPARK:
 bool gUseSpark = false;
 spark::IContext* gSparkContext = nullptr;
-Forward* gShaderInstance = nullptr;
+Forward* gForwardSpark = nullptr;
+GenerateGBuffer* gGenerateGBufferSpark= nullptr;
 
 
 
@@ -144,10 +145,14 @@ void FinalizeApp();
 // DS
 void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, ID3D11VertexShader *pVS, ID3D11PixelShader *pPS );
 
-void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, float fAmbient, D3DXVECTOR3 vCameraPos, ID3D11Device* pd3dDevice, ID3D11DeviceContext* pd3dImmediateContext );
+void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, 
+    D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, 
+    float fAmbient, D3DXVECTOR3 vCameraPos, ID3D11Device* pd3dDevice, 
+    ID3D11DeviceContext* pd3dImmediateContext , Base * sparkShader);
 
-void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, ID3D11Device* pd3dDevice, ID3D11VertexShader *pVS, ID3D11PixelShader *pPS );
-
+void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetView* pRTV, 
+    ID3D11DepthStencilView* pDSV, ID3D11Device* pd3dDevice, ID3D11VertexShader *pVS, 
+    ID3D11PixelShader *pPS, Base * sparkShader );
 
 void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice )
 {
@@ -161,9 +166,17 @@ void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice
     d3dDeviceContext->ClearRenderTargetView(mGBufferRTV[1], clearColor);
     d3dDeviceContext->ClearRenderTargetView(mGBufferRTV[2], clearColor);
 
-    d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), &mGBufferRTV.front(), mDepthBuffer->GetDepthStencil());
 
-    RenderScene(d3dDeviceContext, NULL, mDepthBuffer->GetDepthStencil(), pDevice, g_pVertexShader, gGBufferPS);
+    if (gUseSpark) {
+        gGenerateGBufferSpark->GetFacet<PackGBuffer>()->SetNormalSpecularTarget( mGBufferRTV[0] );
+        gGenerateGBufferSpark->GetFacet<PackGBuffer>()->SetAlbedoTarget( mGBufferRTV[1] );
+        gGenerateGBufferSpark->GetFacet<PackGBuffer>()->SetPositionZGradTarget( mGBufferRTV[2] );
+    }
+    else {
+        d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), &mGBufferRTV.front(), mDepthBuffer->GetDepthStencil());
+    }
+
+    RenderScene(d3dDeviceContext, NULL, mDepthBuffer->GetDepthStencil(), pDevice, g_pVertexShader, gGBufferPS, gGenerateGBufferSpark);
 #if 0
     d3dDeviceContext->IASetInputLayout(g_pVertexLayout11);
 
@@ -687,7 +700,8 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     g_Camera.SetRadius( fObjectRadius * 3.0f, fObjectRadius * 0.5f, fObjectRadius * 10.0f );
 
     // SPARK:
-    gShaderInstance = gSparkContext->CreateShaderInstance<Forward>( pd3dDevice );
+    gForwardSpark = gSparkContext->CreateShaderInstance<Forward>( pd3dDevice );
+    gGenerateGBufferSpark = gSparkContext->CreateShaderInstance<GenerateGBuffer>( pd3dDevice );
 
     return S_OK;
 }
@@ -848,7 +862,8 @@ void RenderDeferred( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd
     auto pRTV = DXUTGetD3D11RenderTargetView();
     pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
 
-    RenderDeferredLighting(pd3dImmediateContext, pd3dDevice);
+    if (!gUseSpark)
+        RenderDeferredLighting(pd3dImmediateContext, pd3dDevice);
 }
 
 //--------------------------------------------------------------------------------------
@@ -923,7 +938,8 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
     SAFE_RELEASE( g_pcbPSPerFrame );
 
     // SPARK:
-    SAFE_RELEASE( gShaderInstance );
+    SAFE_RELEASE( gForwardSpark );
+    SAFE_RELEASE( gGenerateGBufferSpark);
 }
 
 
@@ -931,8 +947,10 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
 {
     ID3D11RenderTargetView* pRTV = DXUTGetD3D11RenderTargetView();
     ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
-
-    RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, gForwardPS);
+    if (gUseSpark) {
+        gForwardSpark->GetFacet<DirectionalLight>()->SetMyTarget( pRTV );
+    }
+    RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, gForwardPS, gForwardSpark);
 }
 
 void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, ID3D11VertexShader *pVS, ID3D11PixelShader *pPS )
@@ -1016,27 +1034,29 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
     }
 }
 
-void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, float fAmbient, D3DXVECTOR3 vCameraPos, ID3D11Device* pd3dDevice, ID3D11DeviceContext* pd3dImmediateContext )
+void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, 
+    D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, 
+    float fAmbient, D3DXVECTOR3 vCameraPos, ID3D11Device* pd3dDevice, 
+    ID3D11DeviceContext* pd3dImmediateContext, Base * sparkShader )
 {
     // Set color and depth/stencil targets
-    gShaderInstance->GetFacet<DirectionalLight>()->SetMyTarget( pRTV );
-    gShaderInstance->SetDepthStencilView( pDSV );
+    sparkShader->SetDepthStencilView( pDSV );
 
     // Set various uniform inputs
-    gShaderInstance->SetWorld( Convert( mWorld ) );
-    gShaderInstance->SetView( Convert( mView ) );
-    gShaderInstance->SetProj( Convert( mProj ) );
-    gShaderInstance->SetObjectColor( spark::float4(1, 1, 1, 1) );
-    gShaderInstance->SetLightDir( Convert(vLightDir) );
-    gShaderInstance->SetAmbient( fAmbient );
-    gShaderInstance->SetLinearSampler( g_pSamLinear );
+    sparkShader->SetWorld( Convert( mWorld ) );
+    sparkShader->SetView( Convert( mView ) );
+    sparkShader->SetProj( Convert( mProj ) );
+    sparkShader->SetObjectColor( spark::float4(1, 1, 1, 1) );
+    sparkShader->SetLightDir( Convert(vLightDir) );
+    sparkShader->SetAmbient( fAmbient );
+    sparkShader->SetLinearSampler( g_pSamLinear );
 //    gShaderInstance->SetCameraPos(Convert(vCameraPos));
 
     // Set up the vertex stream
     ID3D11Buffer* vb = g_Mesh11.GetVB11( 0, 0 );
     UINT vbOffset = 0;
     UINT vbStride = g_Mesh11.GetVertexStride( 0, 0 );
-    gShaderInstance->SetMyVertexStream(
+    sparkShader->SetMyVertexStream(
         spark::d3d11::VertexStream(
         vb, vbOffset, vbStride ) );
 
@@ -1064,22 +1084,24 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
             (UINT)pSubset->IndexCount,
             (UINT)pSubset->IndexStart,
             (UINT)pSubset->VertexStart);
-        gShaderInstance->SetMyDrawSpan( drawSpan );
+        sparkShader->SetMyDrawSpan( drawSpan );
 
         // Set the diffuse texture from the subset material
         ID3D11ShaderResourceView* diffuseTexture =
             g_Mesh11.GetMaterial( pSubset->MaterialID )->pDiffuseRV11;
-        gShaderInstance->SetDiffuseTexture( diffuseTexture );
+        sparkShader->SetDiffuseTexture( diffuseTexture );
 
         // Submit a rendering operation using this configuration
-        gShaderInstance->Submit( pd3dDevice, pd3dImmediateContext );
+        sparkShader->Submit( pd3dDevice, pd3dImmediateContext );
     }
 
     // Restore color and depth/stencil targets to what the D3D code expects
     pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
 }
 
-void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, ID3D11Device* pd3dDevice, ID3D11VertexShader *pVS, ID3D11PixelShader *pPS )
+void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetView* pRTV, 
+    ID3D11DepthStencilView* pDSV, ID3D11Device* pd3dDevice, ID3D11VertexShader *pVS, 
+    ID3D11PixelShader *pPS, Base * sparkShader )
 {
     // Common:
     D3DXVECTOR3 vLightDir;
@@ -1110,7 +1132,7 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     else
     {
         // SPARK:
-        RenderSceneSpark(pRTV, pDSV, mWorld, mView, mProj, vLightDir, fAmbient, vCameraPos, pd3dDevice, pd3dImmediateContext);
+        RenderSceneSpark(pRTV, pDSV, mWorld, mView, mProj, vLightDir, fAmbient, vCameraPos, pd3dDevice, pd3dImmediateContext, sparkShader);
     }
 }
 
