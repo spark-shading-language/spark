@@ -1030,7 +1030,7 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
     gShaderInstance->SetLightDir( Convert(vLightDir) );
     gShaderInstance->SetAmbient( fAmbient );
     gShaderInstance->SetLinearSampler( g_pSamLinear );
-    gShaderInstance->SetCameraPos(Convert(vCameraPos));
+//    gShaderInstance->SetCameraPos(Convert(vCameraPos));
 
     // Set up the vertex stream
     ID3D11Buffer* vb = g_Mesh11.GetVB11( 0, 0 );
