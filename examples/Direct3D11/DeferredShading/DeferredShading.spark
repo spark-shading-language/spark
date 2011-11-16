@@ -38,7 +38,7 @@ abstract shader class Base extends D3D11DrawPass
     input @Uniform float3            lightDir;
     input @Uniform float             ambient;
 //    input @Uniform float3            cameraPos;
-    abstract output @Pixel float4 myTarget ;
+//    abstract output @Pixel float4 myTarget ;
 
 }
 
@@ -95,9 +95,34 @@ abstract mixin shader class DirectionalLight
     @Fragment float  lighting = max(saturate(dot(lightDir, normal)), ambient);
     @Fragment float4 color    = diffuse * lighting ;
 
-    override myTarget = color;
+    output @Pixel float4 myTarget = color;
 }
 
 
-shader class BasicSpark11 extends GenerateSurfaceAttributes, DirectionalLight
+shader class Forward extends GenerateSurfaceAttributes, DirectionalLight
 {}
+
+abstract mixin shader class PackGBuffer
+    extends Base, SurfaceAttributes
+{
+    float2 EncodeSphereMap(float3 n)
+    {
+        return n.xy * rsqrt(8.0f - 8.0f * n.z) + 0.5f;
+    }
+
+    @Fragment float4 normalSpecular = float4(EncodeSphereMap(normal),
+                                                specularAmount,
+                                                specularPower);
+
+    @Fragment float2 positionZGrad = float2(ddx_coarse(positionView.z),
+                                         ddy_coarse(positionView.z));
+
+    output @Pixel float4 normalSpecularTarget = normalSpecular;
+    output @Pixel float4 albedoTarget = albedo;
+    output @Pixel float2 positionZGradTarget = positionZGrad;
+
+}
+
+shader class GenerateGBuffer extends GenerateSurfaceAttributes, PackGBuffer
+{}
+

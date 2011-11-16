@@ -73,7 +73,7 @@ ID3D11DepthStencilView* mDepthBufferReadOnlyDSV;
 // SPARK:
 bool gUseSpark = false;
 spark::IContext* gSparkContext = nullptr;
-BasicSpark11* gShaderInstance = nullptr;
+Forward* gShaderInstance = nullptr;
 
 
 
@@ -687,7 +687,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     g_Camera.SetRadius( fObjectRadius * 3.0f, fObjectRadius * 0.5f, fObjectRadius * 10.0f );
 
     // SPARK:
-    gShaderInstance = gSparkContext->CreateShaderInstance<BasicSpark11>( pd3dDevice );
+    gShaderInstance = gSparkContext->CreateShaderInstance<Forward>( pd3dDevice );
 
     return S_OK;
 }
@@ -1019,7 +1019,7 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
 void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, float fAmbient, D3DXVECTOR3 vCameraPos, ID3D11Device* pd3dDevice, ID3D11DeviceContext* pd3dImmediateContext )
 {
     // Set color and depth/stencil targets
-    gShaderInstance->SetMyTarget( pRTV );
+    gShaderInstance->GetFacet<DirectionalLight>()->SetMyTarget( pRTV );
     gShaderInstance->SetDepthStencilView( pDSV );
 
     // Set various uniform inputs
