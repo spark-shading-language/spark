@@ -12,9 +12,8 @@
 // assume any responsibility for any errors which may appear in this software nor any
 // responsibility to update it.
 
-// BasicSpark11.spark
 
-shader class BasicSpark11 extends D3D11DrawPass
+abstract shader class Base extends D3D11DrawPass
 {
     // @Uniform
     // 
@@ -22,14 +21,8 @@ shader class BasicSpark11 extends D3D11DrawPass
     input @Uniform float4x4          view;
     input @Uniform float4x4          proj;
     input @Uniform float4            objectColor;
-    input @Uniform float3            lightDir;
-    input @Uniform float             ambient;
     input @Uniform Texture2D[float4] diffuseTexture;
     input @Uniform SamplerState      linearSampler;
-    input @Uniform float3            cameraPos;
-
-    @Uniform float4x4 viewProj      = mul( view, proj );
-    @Uniform float4x4 worldViewProj = mul( world, viewProj );
 
     // @AssembledVertex
     //
@@ -39,56 +32,72 @@ shader class BasicSpark11 extends D3D11DrawPass
         float3 normal;
         float2 texCoord;
     }
+
     input @Uniform VertexStream[PNU] myVertexStream;
+    input @Uniform DrawSpan myDrawSpan;
+    input @Uniform float3            lightDir;
+    input @Uniform float             ambient;
+//    input @Uniform float3            cameraPos;
+    abstract output @Pixel float4 myTarget ;
+
+}
+
+abstract mixin shader class SurfaceAttributes extends D3D11DrawPass
+{
+    abstract @Fragment float3 positionView;         // View space position
+    abstract @Fragment float3 normal;               // View space normal
+    abstract @Fragment float4 albedo;
+    abstract @Fragment float specularAmount;        // Treated as a multiplier on albedo
+    abstract @Fragment float specularPower;
+}
+
+abstract mixin shader class GenerateSurfaceAttributes
+    extends Base, SurfaceAttributes
+{
+    @Uniform float4x4 worldview = mul(world, view);
+    @Uniform float4x4 viewProj      = mul( view, proj );
+    @Uniform float4x4 worldViewProj = mul( world, viewProj );
+
 
     @AssembledVertex PNU    fetched  = myVertexStream( IA_VertexID );
     @AssembledVertex float3 P_model  = fetched.position;
     @AssembledVertex float3 N_model  = fetched.normal;
     @AssembledVertex float2 texCoord = fetched.texCoord;
 
-    input @Uniform DrawSpan myDrawSpan;
     override IA_DrawSpan = myDrawSpan;
-    
-    // @Constant
-    //
-    @Constant float4 colSpecular = float4(1.0f, 1.0f, 1.0f, 1.0f);
-    @Constant float4 lightSpecular = 0.1 * float4(1.0f, 1.0f, 1.0f, 1.0f);
-
-    // @Uniform 
-    //
-    @Fragment float3 vLightDirNorm = normalize(lightDir);
 
     // @CoarseVertex
     //
     @CoarseVertex float3 N_world = mul(N_model, float3x3(world));
-    @CoarseVertex float3 viewVec = normalize(cameraPos - mul(float4(P_model, 1.0f), world).xyz);
+//    @CoarseVertex float3 viewVec = normalize(cameraPos - mul(float4(P_model, 1.0f), world).xyz);
+    @CoarseVertex float3 P_view = mul(float4(P_model,1.0f), worldview).xyz;
 
     // @RasterVertex
     //
     override RS_Position = mul(float4(P_model, 1.0f), worldViewProj);
 
-    // @Fragment
-    //
-    @Fragment float4 diffuse  = Sample(diffuseTexture, linearSampler, texCoord);
-    @Fragment float  lighting = max(saturate(dot(lightDir, N_world)), ambient);
-//    @Fragment float4 color    = diffuse * lighting ;
+    override positionView = P_view;         // View space position
+    override normal = N_world;               // World space normal
+    override albedo = Sample(diffuseTexture, linearSampler, texCoord);
+    override specularAmount = 0.9f;        // Treated as a multiplier on albedo
+    override specularPower = 25.0f;
+}
 
-    @Fragment float4 Specular( @Fragment float3 vNormal, @Fragment float3 vView, @Fragment float3 vLightDir)
-    {
-        @Fragment float fNormalDotLight = saturate ( dot(vNormal, vLightDir) );  
-        @Fragment float3 vLightReflect = 2.0 * fNormalDotLight * vNormal - vLightDir;
-        @Fragment float fViewDotReflect = saturate( dot(vView, vLightReflect) );
-        @Fragment float fSpecIntensity1 = pow(fViewDotReflect, 2.0f);
-        @Fragment float4 fSpecIntensity = float4(fSpecIntensity1);
 
-        @Fragment float4 specular = fSpecIntensity * colSpecular * lightSpecular;
-        return specular;
-    }
+abstract mixin shader class DirectionalLight
+    extends Base, SurfaceAttributes
+{
 
-    @Fragment float4 color = Specular(  normalize(N_world), 
-                                        normalize(viewVec), 
-                                        vLightDirNorm);
+    //@Fragment float4 color = float4(normal, 1.0f);
     // @Pixel
     //
-    output @Pixel float4 myTarget = color;
+    @Fragment float4 diffuse  = albedo;
+    @Fragment float  lighting = max(saturate(dot(lightDir, normal)), ambient);
+    @Fragment float4 color    = diffuse * lighting ;
+
+    override myTarget = color;
 }
+
+
+shader class BasicSpark11 extends GenerateSurfaceAttributes, DirectionalLight
+{}
