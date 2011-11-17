@@ -59,42 +59,47 @@ namespace Spark.Emit.D3D11
 
             InitBlock.AppendComment("D3D11 Input Assembler");
 
-            var inputElementDescsVal = InitBlock.Temp(
-                "inputElementDescs",
-                InitBlock.Array(
-                    EmitTarget.GetBuiltinType("D3D11_INPUT_ELEMENT_DESC"),
-                    (from a in iaElement.Attributes
+            var inputElementInits = (from a in iaElement.Attributes
                      where a.IsOutput
                      where a != vertexID.Attribute
                      where a != instanceID.Attribute
                      let name = SharedHLSL.MapName(a)
                      let attrInfo = DecomposeAttr(a)
                      from e in DeclareInputElements(InitBlock, name, attrInfo)
-                     select e).ToArray()));
+                     select e).ToArray();
 
-            var inputLayoutPointerType = EmitTarget.GetOpaqueType("ID3D11InputLayout*");
-            inputLayoutField = EmitClass.AddPrivateField(
-                inputLayoutPointerType,
-                "_inputLayout");
-            InitBlock.SetArrow(
-                CtorThis,
-                inputLayoutField,
-                EmitTarget.GetNullPointer(inputLayoutPointerType));
+            if (_inputElementCount != 0)
+            {
+                var inputElementDescsVal = InitBlock.Temp(
+                    "inputElementDescs",
+                    InitBlock.Array(
+                        EmitTarget.GetBuiltinType("D3D11_INPUT_ELEMENT_DESC"),
+                        inputElementInits));
 
-            InitBlock.CallCOM(
-                CtorDevice,
-                "ID3D11Device",
-                "CreateInputLayout",
-                inputElementDescsVal.GetAddress(),
-                InitBlock.LiteralU32((UInt32) _inputElementCount),
-                EmitPass.VertexShaderBytecodeVal,
-                EmitPass.VertexShaderBytecodeSizeVal,
-                InitBlock.GetArrow(CtorThis, inputLayoutField).GetAddress());
+                var inputLayoutPointerType = EmitTarget.GetOpaqueType("ID3D11InputLayout*");
+                inputLayoutField = EmitClass.AddPrivateField(
+                    inputLayoutPointerType,
+                    "_inputLayout");
+                InitBlock.SetArrow(
+                    CtorThis,
+                    inputLayoutField,
+                    EmitTarget.GetNullPointer(inputLayoutPointerType));
 
-            DtorBlock.CallCOM(
-                DtorBlock.GetArrow(DtorThis, inputLayoutField),
-                "IUnknown",
-                "Release");
+                InitBlock.CallCOM(
+                    CtorDevice,
+                    "ID3D11Device",
+                    "CreateInputLayout",
+                    inputElementDescsVal.GetAddress(),
+                    InitBlock.LiteralU32((UInt32)_inputElementCount),
+                    EmitPass.VertexShaderBytecodeVal,
+                    EmitPass.VertexShaderBytecodeSizeVal,
+                    InitBlock.GetArrow(CtorThis, inputLayoutField).GetAddress());
+
+                DtorBlock.CallCOM(
+                    DtorBlock.GetArrow(DtorThis, inputLayoutField),
+                    "IUnknown",
+                    "Release");
+            }
         }
 
         public override void EmitImplBind()
@@ -109,42 +114,49 @@ namespace Spark.Emit.D3D11
                     EmitContext.EmitAttributeRef(drawSpanAttr, ExecBlock, SubmitEnv),
                     SubmitContext, } );
 
+            var inputLayoutPointerType = EmitTarget.GetOpaqueType("ID3D11InputLayout*");
+            var inputLayoutToBind = _inputElementCount == 0
+                ? EmitTarget.GetNullPointer(inputLayoutPointerType)
+                : ExecBlock.GetArrow(SubmitThis, inputLayoutField);
             ExecBlock.CallCOM(
                 SubmitContext,
                 "ID3D11DeviceContext",
                 "IASetInputLayout",
-                ExecBlock.GetArrow( SubmitThis, inputLayoutField ) );
+                inputLayoutToBind);
 
-            var vertexBuffersVal = ExecBlock.Temp(
-                "inputVertexBuffers",
-                ExecBlock.Array(
-                    EmitTarget.GetOpaqueType( "ID3D11Buffer*" ),
-                    (from b in _vertexBuffers
-                     select EmitExp( b, ExecBlock, SubmitEnv )) ) );
+            if (_vertexBuffers.Count != 0)
+            {
+                var vertexBuffersVal = ExecBlock.Temp(
+                    "inputVertexBuffers",
+                    ExecBlock.Array(
+                        EmitTarget.GetOpaqueType("ID3D11Buffer*"),
+                        (from b in _vertexBuffers
+                         select EmitExp(b, ExecBlock, SubmitEnv))));
 
-            var vertexBuffersStridesVal = ExecBlock.Temp(
-                "inputVertexBufferStrides",
-                ExecBlock.Array(
-                    EmitTarget.GetBuiltinType( "UINT" ),
-                    (from b in _vertexBufferStrides
-                     select EmitExp( b, ExecBlock, SubmitEnv )) ) );
+                var vertexBuffersStridesVal = ExecBlock.Temp(
+                    "inputVertexBufferStrides",
+                    ExecBlock.Array(
+                        EmitTarget.GetBuiltinType("UINT"),
+                        (from b in _vertexBufferStrides
+                         select EmitExp(b, ExecBlock, SubmitEnv))));
 
-            var vertexBuffersOffsetsVal = ExecBlock.Temp(
-                "inputVertexBufferOffsets",
-                ExecBlock.Array(
-                    EmitTarget.GetBuiltinType( "UINT" ),
-                    (from b in _vertexBufferOffsets
-                     select EmitExp( b, ExecBlock, SubmitEnv )) ) );
+                var vertexBuffersOffsetsVal = ExecBlock.Temp(
+                    "inputVertexBufferOffsets",
+                    ExecBlock.Array(
+                        EmitTarget.GetBuiltinType("UINT"),
+                        (from b in _vertexBufferOffsets
+                         select EmitExp(b, ExecBlock, SubmitEnv))));
 
-            ExecBlock.CallCOM(
-                SubmitContext,
-                "ID3D11DeviceContext",
-                "IASetVertexBuffers",
-                ExecBlock.LiteralU32( 0 ),
-                ExecBlock.LiteralU32( (UInt32) _vertexBuffers.Count ),
-                vertexBuffersVal.GetAddress(),
-                vertexBuffersStridesVal.GetAddress(),
-                vertexBuffersOffsetsVal.GetAddress() );
+                ExecBlock.CallCOM(
+                    SubmitContext,
+                    "ID3D11DeviceContext",
+                    "IASetVertexBuffers",
+                    ExecBlock.LiteralU32(0),
+                    ExecBlock.LiteralU32((UInt32)_vertexBuffers.Count),
+                    vertexBuffersVal.GetAddress(),
+                    vertexBuffersStridesVal.GetAddress(),
+                    vertexBuffersOffsetsVal.GetAddress());
+            }
 
             /*
             ExecBlock.CallCOM(

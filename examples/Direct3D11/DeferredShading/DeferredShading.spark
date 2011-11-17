@@ -160,7 +160,7 @@ abstract mixin shader class UnpackGBuffer
     input @Uniform Texture2D[float2] zBufferTexture;
 
     // Get it somehow..
-    @Fragment uint2 positionViewport = uint2(0, 0);
+    @Fragment uint2 positionViewport = uint2(PS_ScreenSpacePosition.xy);
 
     @Fragment float4 normalSpecular = Load(normalSpecularTexture, positionViewport.xy).xyzw;
     override albedo                 = Load(albedoTexture, positionViewport.xy).xyzw;
@@ -191,17 +191,18 @@ abstract mixin shader class UnpackGBuffer
 
     override specularAmount = normalSpecular.z;
     override specularPower = normalSpecular.w;
-    
 }
 
-//shader class FullScreenTriangle extends D3D11DrawPass
-//{
+abstract mixin shader class FullScreenTriangle extends D3D11DrawPass
+{
 //    input @Uniform DrawSpan myDrawSpan;
 //    override IA_DrawSpan = myDrawSpan;
-//
-//    // override IA_DrawSpan = DrawTriangleList( 3 );
-//
-//    @CoarseVertex  float2 grid = float2((VS_VertexID << 1) & 2, VS_VertexID & 2);
-//    override @RasterVertex float4 RS_Position = float4(grid * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f), 0.0f, 1.0f);
-//}
 
+    override IA_DrawSpan = TriangleList( 3 );
+
+    @CoarseVertex  float2 grid = float2((VS_VertexID << 1) & 2, VS_VertexID & 2);
+    override RS_Position = float4(grid * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f), 0.0f, 1.0f);
+}
+
+shader class DirectionalLightGBuffer extends FullScreenTriangle, UnpackGBuffer, DirectionalLight
+{}

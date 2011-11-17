@@ -443,6 +443,7 @@ namespace spark
             IndexStream()
             {
                 memset(this, 0, sizeof(*this));
+                format = DXGI_FORMAT_R16_UINT;
             }
 
             IndexStream(
@@ -479,6 +480,12 @@ namespace spark
                 const PrimitiveSpan& primitiveSpan )
                 : indexStream(indexStream)
                 , primitiveSpan(primitiveSpan)
+            {
+            }
+
+            explicit DrawSpan(
+                const PrimitiveSpan& primitiveSpan )
+                : primitiveSpan(primitiveSpan)
             {
             }
 
@@ -531,6 +538,19 @@ namespace spark
             primitiveSpan.direct.baseVertexIndex = baseVertexIndex;
 
             return DrawSpan(indexStream, primitiveSpan);
+        }
+
+        static inline PrimitiveSpan TriangleList(
+            UINT vertexCount,
+            UINT startVertexLocation )
+        {
+            PrimitiveSpan primitiveSpan;
+            primitiveSpan.primitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+            primitiveSpan.flavor = PrimitiveSpan::kDraw;
+            primitiveSpan.direct.indexCount = vertexCount;
+            primitiveSpan.direct.baseIndexIndex = 0;
+            primitiveSpan.direct.baseVertexIndex = startVertexLocation;
+            return primitiveSpan;
         }
 
         static inline DrawSpan InstancedDrawSpan(

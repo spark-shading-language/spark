@@ -4196,6 +4196,13 @@ namespace Spark.Resolve
         }
 
         private string OverloadContextNameImpl(
+            ResOverloadedTerm term )
+        {
+            return OverloadContextName(
+                term.Terms.First());
+        }
+
+        private string OverloadContextNameImpl(
             ResElementRef context )
         {
             return OverloadContextName( context.MemberTerm );
@@ -4947,6 +4954,11 @@ namespace Spark.Resolve
                 e = Coerce(e, fromType, toType, env);
                 if (e is ResErrorTerm)
                     return ResErrorTerm.Instance;
+
+                fromFQType = new ResFreqQualType(
+                    fromFQType.Range,
+                    fromFreq,
+                    toType);
             }
 
 

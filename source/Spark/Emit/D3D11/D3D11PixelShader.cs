@@ -760,6 +760,12 @@ namespace Spark.Emit.D3D11
                 ref firstParam,
                 entryPointSpan);
 
+            hlslContext.DeclareParamAndBind(
+                GetAttribute(fragmentElement, "PS_ScreenSpacePosition"),
+                "SV_Position",
+                ref firstParam,
+                entryPointSpan);
+
             for (int ii = 0; ii < renderTargetCount; ++ii)
             {
                 if( !firstParam ) entryPointSpan.WriteLine(",");
@@ -825,21 +831,35 @@ namespace Spark.Emit.D3D11
         {
             ExecBlock.AppendComment( "D3D11 Output Merger" );
 
-            var renderTargetViewVals = (from a in renderTargetAttributes
-                                        select EmitContext.EmitAttributeRef( a, ExecBlock, SubmitEnv )).ToArray();
-            var renderTargetViewsVal = ExecBlock.Temp(
-                "renderTargetViews",
-                ExecBlock.Array(
-                    EmitTarget.GetOpaqueType( "ID3D11RenderTargetView*" ),
-                    renderTargetViewVals ) );
+            if (renderTargetAttributes.Length != 0)
+            {
+                var renderTargetViewVals = (from a in renderTargetAttributes
+                                            select EmitContext.EmitAttributeRef(a, ExecBlock, SubmitEnv)).ToArray();
+                var renderTargetViewsVal = ExecBlock.Temp(
+                    "renderTargetViews",
+                    ExecBlock.Array(
+                        EmitTarget.GetOpaqueType("ID3D11RenderTargetView*"),
+                        renderTargetViewVals));
 
-            ExecBlock.CallCOM(
-                SubmitContext,
-                "ID3D11DeviceContext",
-                "OMSetRenderTargets",
-                ExecBlock.LiteralU32( (UInt32) renderTargetCount ),
-                renderTargetViewsVal.GetAddress(),
-                EmitContext.EmitAttributeRef( depthStencilViewAttribute, ExecBlock, SubmitEnv ) );
+                ExecBlock.CallCOM(
+                    SubmitContext,
+                    "ID3D11DeviceContext",
+                    "OMSetRenderTargets",
+                    ExecBlock.LiteralU32((UInt32)renderTargetCount),
+                    renderTargetViewsVal.GetAddress(),
+                    EmitContext.EmitAttributeRef(depthStencilViewAttribute, ExecBlock, SubmitEnv));
+            }
+            else
+            {
+                ExecBlock.CallCOM(
+                    SubmitContext,
+                    "ID3D11DeviceContext",
+                    "OMSetRenderTargets",
+                    ExecBlock.LiteralU32(0),
+                    EmitTarget.GetNullPointer(
+                        EmitTarget.GetOpaqueType("ID3D11RenderTargetView**")),
+                    EmitContext.EmitAttributeRef(depthStencilViewAttribute, ExecBlock, SubmitEnv));
+            }
 
             var floatOne = ExecBlock.LiteralF32( 1.0f );
             var blendFactorVal = ExecBlock.Temp(
