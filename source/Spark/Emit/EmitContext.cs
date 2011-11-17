@@ -524,6 +524,10 @@ namespace Spark.Emit
 
             info.DirectFacet = directFacetInfo;
 
+            ifaceClass.WrapperWriteLineProtected(
+                "{0}* _StaticCastImpl( void* ) {{ return this; }}",
+                className);
+
             // Base-class facet, if any
             if( primaryBaseInfo != null )
             {
