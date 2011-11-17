@@ -126,3 +126,71 @@ abstract mixin shader class PackGBuffer
 shader class GenerateGBuffer extends GenerateSurfaceAttributes, PackGBuffer
 {}
 
+abstract mixin shader class UnpackGBuffer
+    extends Base, SurfaceAttributes
+{
+    float3 ComputePositionViewFromZ(float2 positionScreen,
+                                    float viewSpaceZ, float4x4 proj)
+    {
+        float2 screenSpaceRay = float2(positionScreen.x / proj._11,
+                                       positionScreen.y / proj._22);
+    
+        float3 positionView = float3(0.0f);
+        positionView.z = viewSpaceZ;
+        // Solve the two projection equations
+        positionView.xy = screenSpaceRay.xy * positionView.z;
+    
+        return positionView;
+    }
+
+    float3 DecodeSphereMap(float2 e)
+    {
+        float3 n = float3(0.0f);
+        float2 tmp = e - e * e;
+        float f = tmp.x + tmp.y;
+        float m = sqrt(4.0f * f - 1.0f);
+        n.xy = m * (e * 4.0f - 2.0f);
+        n.z  = 3.0f - 8.0f * f;
+        return n;
+    }
+
+    input @Uniform Texture2D[float4] normalSpecularTexture;
+    input @Uniform Texture2D[float4] albedoTexture;
+    input @Uniform Texture2D[float2] zGradTexture;
+    input @Uniform Texture2D[float2] zBufferTexture;
+
+    // Get it somehow..
+    @Fragment uint2 positionViewport = uint2(0, 0);
+
+    @Fragment float4 normalSpecular = Load(normalSpecularTexture, positionViewport.xy).xyzw;
+    override albedo                 = Load(albedoTexture, positionViewport.xy).xyzw;
+    @Fragment float2 positionZGrad  = Load(zGradTexture, positionViewport.xy).xy;
+    @Fragment float zBuffer         = Load(zBufferTexture, positionViewport.xy).x;
+    
+    @Fragment float2 gbufferDim = GetDimensions(albedoTexture);
+    
+    // Compute screen/clip-space position and neighbour positions
+    // NOTE: Mind DX11 viewport transform and pixel center!
+    // NOTE: This offset can actually be precomputed on the CPU but it's actually slower to read it from
+    // a constant buffer than to just recompute it.
+    @Fragment float2 screenPixelOffset = float2(2.0f, -2.0f) / gbufferDim;
+    @Fragment float2 positionScreen = (float2(positionViewport.xy) + 0.5f) * screenPixelOffset.xy + float2(-1.0f, 1.0f);
+    @Fragment float2 positionScreenX = positionScreen + float2(screenPixelOffset.x, 0.0f);
+    @Fragment float2 positionScreenY = positionScreen + float2(0.0f, screenPixelOffset.y);
+        
+    // Decode into reasonable outputs
+        
+    // Unproject depth buffer Z value into view space
+    @Fragment float viewSpaceZ = proj._43 / (zBuffer - proj._33);
+
+    override positionView = ComputePositionViewFromZ(positionScreen, viewSpaceZ, proj);
+//    data.positionViewDX = ComputePositionViewFromZ(positionScreenX, viewSpaceZ + rawData.positionZGrad.x) - data.positionView;
+//    data.positionViewDY = ComputePositionViewFromZ(positionScreenY, viewSpaceZ + rawData.positionZGrad.y) - data.positionView;
+
+    override normal = DecodeSphereMap(normalSpecular.xy);
+
+    override specularAmount = normalSpecular.z;
+    override specularPower = normalSpecular.w;
+    
+}
+

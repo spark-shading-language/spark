@@ -852,7 +852,6 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
     d3dDeviceContext->PSSetShader(gLightPS, 0, 0);
 //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
     d3dDeviceContext->Draw(3, 0);
-
 }
 
 void RenderDeferred( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice ) 
@@ -860,10 +859,13 @@ void RenderDeferred( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd
     RenderGBuffer(pd3dImmediateContext, pd3dDevice);
     auto pDSV = DXUTGetD3D11DepthStencilView();
     auto pRTV = DXUTGetD3D11RenderTargetView();
-    pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
 
-    if (!gUseSpark)
-        RenderDeferredLighting(pd3dImmediateContext, pd3dDevice);
+    if (gUseSpark) {
+//        ->GetFacet<DirectionalLight>()->SetMyTarget( pRTV );
+    } else {
+        pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
+    }
+    RenderDeferredLighting(pd3dImmediateContext, pd3dDevice);
 }
 
 //--------------------------------------------------------------------------------------

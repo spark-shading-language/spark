@@ -46,6 +46,16 @@ abstract shader class D3D11DrawPass
 	[[Builtin("llvm", "u32")]]
 	type uint;
 
+	[[Builtin("hlsl", "uint2")]]
+	[[Builtin("c++", "spark::uint2")]]
+	[[Builtin("llvm", "u32^2")]]
+	type uint2;
+
+	[[Builtin("hlsl", "uint3")]]
+	[[Builtin("c++", "spark::uint3")]]
+	[[Builtin("llvm", "u32^3")]]
+	type uint3;
+
 	[[Builtin("hlsl", "uint4")]]
 	[[Builtin("c++", "spark::uint4")]]
 	[[Builtin("llvm", "u32^4")]]
@@ -598,6 +608,36 @@ abstract shader class D3D11DrawPass
 		return v0 + (v1 - v0) * a;
 	}
 
+	[[Builtin("hlsl", "((uint2) {0})")]]
+	uint2 uint2( uint s );
+
+	[[Builtin("hlsl", "uint2({0}, {1})")]]
+	uint2 uint2( uint x, uint y );
+
+	[[Builtin("hlsl", "((uint2) {0})")]]
+	uint2 uint2( int s );
+
+	[[Builtin("hlsl", "uint2({0}, {1})")]]
+	uint2 uint2( int x, int y );
+
+	[[Builtin("hlsl", "uint3({0}, {1})")]]
+	uint3 uint3( uint2 xy, int z );
+
+
+	[[Builtin("hlsl", "((uint3) {0})")]]
+	uint3 uint3( uint s );
+
+	[[Builtin("hlsl", "uint3({0}, {1}, {2})")]]
+	uint3 uint3( uint x, uint y, uint z );
+
+	[[Builtin("hlsl", "((uint3) {0})")]]
+	uint3 uint3( int s );
+
+	[[Builtin("hlsl", "uint3({0}, {1}, {2})")]]
+	uint3 uint3( int x, int y, int z );
+
+
+
 	[[Builtin("hlsl", "((uint4) {0})")]]
 	uint4 uint4( uint s );
 
@@ -612,6 +652,9 @@ abstract shader class D3D11DrawPass
 
 	[[Builtin("hlsl", "((float2) {0})")]]
 	float2 float2( float s );
+
+	[[Builtin("hlsl", "((float2) {0})")]]
+	float2 float2( uint2 v );
 
 	[[Builtin("hlsl", "float2({0}, {1})")]]
 	float2 float2( float x, float y);
@@ -680,6 +723,9 @@ abstract shader class D3D11DrawPass
 	[[Builtin("hlsl", "pow({0}, {1})")]]
 	float pow( float base, float exponent );
 
+	[[Builtin("hlsl", "sqrt({0})")]]
+	float sqrt( float value );
+
 	[[Builtin("hlsl", "pow({0}, {1})")]]
 	float3 pow( float3 base, float exponent );
 
@@ -701,6 +747,15 @@ abstract shader class D3D11DrawPass
 	[[Builtin("hlsl", "({0}).SampleLevel({1}, {2}, {3})")]]
 	T SampleLevel[type T]( Texture2D[T] t, SamplerState s, float2 v, float level );
 
+	[[Builtin("hlsl", "({0}).Load({1}, {2})")]]
+	T Load[type T]( Texture2D[T] t, uint3 v );
+
+	[[Builtin("hlsl", "({0}).Load({1}, uint3({2},0))")]]
+	T Load[type T]( Texture2D[T] t, uint2 v );
+
+	[[Builtin("hlsl", "__GetDimensionsF({0})")]]
+	float2 GetDimensions[type T]( Texture2D[T] t );
+
 	[[Builtin("hlsl", "({0})[{1}]")]]
 	T operator()[type T]( Buffer[T] buffer, uint index );
 
@@ -717,6 +772,7 @@ abstract shader class D3D11DrawPass
 
 	[[Builtin("hlsl", "({0}).x")]]	float operator(x)( float2 v );
 	[[Builtin("hlsl", "({0}).y")]]	float operator(y)( float2 v );
+	[[Builtin("hlsl", "({0}).xy")]]	float2 operator(xy)( float2 v );
 
 	[[Builtin("hlsl", "({0}).x")]]	float operator(x)( float3 v );
 	[[Builtin("hlsl", "({0}).y")]]	float operator(y)( float3 v );
@@ -734,15 +790,34 @@ abstract shader class D3D11DrawPass
 
 	[[Builtin("hlsl", "({0}).xy")]]	float2 operator(xy)( float4 v );
 	[[Builtin("hlsl", "({0}).xyz")]]	float3 operator(xyz)( float4 v );
+	[[Builtin("hlsl", "({0}).xyzw")]]	float4 operator(xyzw)( float4 v );
 	[[Builtin("hlsl", "({0}).xxxy")]]	float4 operator(xxxy)( float4 v );
 	[[Builtin("hlsl", "({0}).yzxw")]]	float4 operator(yzxw)( float4 v );
 
 	// Components of vectors
 
+	[[Builtin("hlsl", "({0}).x")]]	uint operator(x)( uint2 v );
+	[[Builtin("hlsl", "({0}).y")]]	uint operator(y)( uint2 v );
+	[[Builtin("hlsl", "({0}).xy")]]	uint2 operator(xy)( uint2 v );
+
+
+	[[Builtin("hlsl", "({0}).x")]]	uint operator(x)( uint3 v );
+	[[Builtin("hlsl", "({0}).y")]]	uint operator(y)( uint3 v );
+	[[Builtin("hlsl", "({0}).z")]]	uint operator(z)( uint3 v );
+	[[Builtin("hlsl", "({0}).xy")]]	uint2 operator(xy)( uint3 v );
+	[[Builtin("hlsl", "({0}).xyz")]]	uint3 operator(xyz)( uint3 v );
+
+
 	[[Builtin("hlsl", "({0}).x")]]	uint operator(x)( uint4 v );
 	[[Builtin("hlsl", "({0}).y")]]	uint operator(y)( uint4 v );
 	[[Builtin("hlsl", "({0}).z")]]	uint operator(z)( uint4 v );
 	[[Builtin("hlsl", "({0}).w")]]	uint operator(w)( uint4 v );
+
+
+    [[Builtin("hlsl", "({0})._11")]] float operator(_11)( float4x4 m );
+    [[Builtin("hlsl", "({0})._22")]] float operator(_22)( float4x4 m );
+    [[Builtin("hlsl", "({0})._33")]] float operator(_33)( float4x4 m );
+    [[Builtin("hlsl", "({0})._43")]] float operator(_43)( float4x4 m );
 
 	// Basic conversions
 	[[Builtin("hlsl", "((float) {0})")]]
