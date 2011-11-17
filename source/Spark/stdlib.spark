@@ -237,6 +237,19 @@ abstract shader class D3D11DrawPass
 	[[Builtin("llvm", "spark::d3d11::DrawSpan")]]
 	DrawSpan Draw( IndexStream indices, PrimitiveSpan span );
 
+	[[Builtin("c++", "spark::d3d11::DrawSpan({0})")]]
+	[[Builtin("llvm", "spark::d3d11::DrawSpanFromPrimitiveSpan")]]
+	implicit DrawSpan Draw( PrimitiveSpan span );
+
+	[[Builtin("c++", "spark::d3d11::TriangleList({0}, {1})")]]
+	[[Builtin("llvm", "spark::d3d11::TriangleList")]]
+	PrimitiveSpan TriangleList( uint vertexCount, uint startVertexLocation );
+
+    @Uniform PrimitiveSpan TriangleList( @Uniform int vertexCount )
+    {
+        return TriangleList( uint(vertexCount), uint(0) );
+    }
+
 	element Constant;
 	element Uniform;
 
@@ -276,6 +289,7 @@ abstract shader class D3D11DrawPass
 	output @RasterVertex float4 __RS_Position = RS_Position;
 
 	element Fragment;
+    input @Fragment float4 PS_ScreenSpacePosition;
 
 	element Pixel;
 	input @Pixel Fragment __ps2om;
@@ -617,6 +631,9 @@ abstract shader class D3D11DrawPass
 	[[Builtin("hlsl", "((uint2) {0})")]]
 	uint2 uint2( int s );
 
+	[[Builtin("hlsl", "((uint2) {0})")]]
+	uint2 uint2( float2 value );
+
 	[[Builtin("hlsl", "uint2({0}, {1})")]]
 	uint2 uint2( int x, int y );
 
@@ -750,7 +767,7 @@ abstract shader class D3D11DrawPass
 	[[Builtin("hlsl", "({0}).Load({1}, {2})")]]
 	T Load[type T]( Texture2D[T] t, uint3 v );
 
-	[[Builtin("hlsl", "({0}).Load({1}, uint3({2},0))")]]
+	[[Builtin("hlsl", "({0}).Load(uint3({1},0))")]]
 	T Load[type T]( Texture2D[T] t, uint2 v );
 
 	[[Builtin("hlsl", "__GetDimensionsF({0})")]]
