@@ -468,6 +468,7 @@ namespace Spark.Emit.CPlusPlus
         IEmitTarget IEmitType.Target { get { return _module.Target; } }
 
         public Span PublicSpan { get { return _publicSpan; } }
+        public Span ProtectedSpan { get { return _protectedSpan; } }
 
         public EmitClassCPP(
             EmitModuleCPP module,
@@ -491,6 +492,8 @@ namespace Spark.Emit.CPlusPlus
             _headerSpan.WriteLine("public:");
             _publicSpan = _headerSpan.IndentSpan();
             _publicFieldsSpan = _publicSpan.InsertSpan();
+            _headerSpan.WriteLine("protected:");
+            _protectedSpan = _headerSpan.IndentSpan();
             _headerSpan.WriteLine("public:");
             _privateSpan = _headerSpan.IndentSpan();
             _headerSpan.WriteLine("};");
@@ -627,6 +630,7 @@ namespace Spark.Emit.CPlusPlus
 
         private Span _publicSpan;
         private Span _publicFieldsSpan;
+        private Span _protectedSpan;
         private Span _privateSpan;
 
         UInt32 _publicSize = 0;

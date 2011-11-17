@@ -42,6 +42,8 @@ namespace Spark.Emit.D3D11
                 if (!a.IsForcedOutput)
                     continue;
 
+                EmitClass.WrapperWriteLine("");
+                EmitClass.WrapperWriteLine("// output @Pixel {0} {1}", a.Type, a.Name);
                 var attrField = EmitClass.AddFieldAndAccessors(
                     EmitTarget.GetOpaqueType("ID3D11RenderTargetView*"),
                     a.Name.ToString());
