@@ -543,7 +543,7 @@ namespace Spark.Emit
                         fieldName );
 
                     ifaceClass.WrapperWriteLine(
-                        "{0} _GetFacetImpl( {0} ) {{ return {1}; }}",
+                        "{0} _StaticCastImpl( {0} ) {{ return {1}; }}",
                         fieldType.ToString(),
                         fieldName );
 
@@ -607,7 +607,7 @@ namespace Spark.Emit
                         field));
 
                 ifaceClass.WrapperWriteLine(
-                    "{0} _GetFacetImpl( {0} ) {{ return {1}; }}",
+                    "{0} _StaticCastImpl( {0} ) {{ return {1}; }}",
                     fieldType.ToString(),
                     fieldName);
 
@@ -618,9 +618,9 @@ namespace Spark.Emit
             }
 
             ifaceClass.WrapperWriteLine(
-                "template<typename TFacet>");
+                "template<typename TBase>");
             ifaceClass.WrapperWriteLine(
-                "TFacet* GetFacet() { return _GetFacetImpl(static_cast<TFacet*>(nullptr)); }");
+                "TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }");
 
             /*
             

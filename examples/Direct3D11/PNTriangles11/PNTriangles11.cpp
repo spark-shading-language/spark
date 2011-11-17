@@ -1314,7 +1314,7 @@ Base* CreateSparkShaderInstance()
     spark::ShaderInstance* shaderInstance =
         static_cast<spark::ShaderInstance*>(composed->CreateInstance( DXUTGetD3D11Device() ));
 
-    return shaderInstance->FindFacet<Base>();
+    return shaderInstance->DynamicCast<Base>();
 }
 
 //--------------------------------------------------------------------------------------

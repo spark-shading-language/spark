@@ -172,7 +172,7 @@ namespace spark
             ci->Finalize( this );
         }
 
-        void* FindFacet( const char* name )
+        void* DynamicCast( const char* name )
         {
             struct FacetInfo
             {
@@ -201,15 +201,15 @@ namespace spark
             return nullptr;
         }
 
-        void* FindFacet( IShaderClass* shaderClass )
+        void* DynamicCast( IShaderClass* shaderClass )
         {
-            return FindFacet( shaderClass->GetName() );
+            return DynamicCast( shaderClass->GetName() );
         }
 
         template<typename T>
-        inline T* FindFacet()
+        inline T* DynamicCast()
         {
-            return reinterpret_cast<T*>(FindFacet( T::StaticGetShaderClassName() ));
+            return reinterpret_cast<T*>(DynamicCast( T::StaticGetShaderClassName() ));
         }
 
 
@@ -252,8 +252,8 @@ namespace spark
             ID3D11DepthStencilView*  GetDepthStencilView() const { return m_depthStencilView; }
             void SetDepthStencilView( ID3D11DepthStencilView*  value ) { m_depthStencilView = value; }
 
-            template<typename TFacet>
-            TFacet* GetFacet() { return _GetFacetImpl(static_cast<TFacet*>(nullptr)); }
+            template<typename TBase>
+            TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
         public:
             ID3D11DepthStencilView* m_depthStencilView;
@@ -264,10 +264,10 @@ namespace spark
         public:
             static inline const char* StaticGetShaderClassName() { return "D3D11GeometryShader"; }
 
-            D3D11DrawPass * _GetFacetImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
+            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
 
-            template<typename TFacet>
-            TFacet* GetFacet() { return _GetFacetImpl(static_cast<TFacet*>(nullptr)); }
+            template<typename TBase>
+            TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
         public:
             D3D11DrawPass *_Base_D3D11DrawPass;
@@ -278,10 +278,10 @@ namespace spark
         public:
             static inline const char* StaticGetShaderClassName() { return "D3D11NullTessellation"; }
 
-            D3D11DrawPass * _GetFacetImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
+            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
 
-            template<typename TFacet>
-            TFacet* GetFacet() { return _GetFacetImpl(static_cast<TFacet*>(nullptr)); }
+            template<typename TBase>
+            TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
         public:
             D3D11DrawPass *_Base_D3D11DrawPass;
@@ -292,10 +292,10 @@ namespace spark
         public:
             static inline const char* StaticGetShaderClassName() { return "D3D11Tessellation"; }
 
-            D3D11DrawPass * _GetFacetImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
+            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
 
-            template<typename TFacet>
-            TFacet* GetFacet() { return _GetFacetImpl(static_cast<TFacet*>(nullptr)); }
+            template<typename TBase>
+            TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
         public:
             D3D11DrawPass *_Base_D3D11DrawPass;
@@ -306,11 +306,11 @@ namespace spark
         public:
             static inline const char* StaticGetShaderClassName() { return "D3D11QuadTessellation"; }
 
-            D3D11DrawPass * _GetFacetImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
-            D3D11Tessellation * _GetFacetImpl( D3D11Tessellation * ) { return _Mixin_D3D11Tessellation; }
+            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
+            D3D11Tessellation * _StaticCastImpl( D3D11Tessellation * ) { return _Mixin_D3D11Tessellation; }
 
-            template<typename TFacet>
-            TFacet* GetFacet() { return _GetFacetImpl(static_cast<TFacet*>(nullptr)); }
+            template<typename TBase>
+            TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
         public:
             D3D11DrawPass *_Base_D3D11DrawPass;
@@ -322,11 +322,11 @@ namespace spark
         public:
             static inline const char* StaticGetShaderClassName() { return "D3D11TriTessellation"; }
 
-            D3D11DrawPass * _GetFacetImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
-            D3D11Tessellation * _GetFacetImpl( D3D11Tessellation * ) { return _Mixin_D3D11Tessellation; }
+            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
+            D3D11Tessellation * _StaticCastImpl( D3D11Tessellation * ) { return _Mixin_D3D11Tessellation; }
 
-            template<typename TFacet>
-            TFacet* GetFacet() { return _GetFacetImpl(static_cast<TFacet*>(nullptr)); }
+            template<typename TBase>
+            TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
         public:
             D3D11DrawPass *_Base_D3D11DrawPass;
