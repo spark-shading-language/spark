@@ -726,6 +726,7 @@ namespace Spark.Emit.HLSL
 
             builtinsSpan.WriteLine("struct Range { int lower; int upper; };");
             builtinsSpan.WriteLine("Range __Range( int lower, int upper ) { Range result; result.lower=lower; result.upper=upper; return result; }");
+            builtinsSpan.WriteLine("float2 __GetDimensionsF( Texture2D t ) { float2 result; t.GetDimensions(result.x, result.y); return result; }");
         }
 
         public IDiagnosticsSink Diagnostics { get { return _shared.Diagnostics; } }
