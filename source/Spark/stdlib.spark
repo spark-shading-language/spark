@@ -971,6 +971,9 @@ abstract shader class D3D11DrawPass
 	[[Builtin("hlsl", "({0}) & ({1})")]]
 	uint operator&( uint left, uint right );
 
+	[[Builtin("hlsl", "({0}) & ((uint) {1})")]]
+	uint operator&( uint left, int right );
+
 	[[Builtin("hlsl", "countbits({0})")]]
 	uint countbits( int value);
 
