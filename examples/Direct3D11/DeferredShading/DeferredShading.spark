@@ -135,22 +135,22 @@ abstract mixin shader class UnpackGBuffer
         float2 screenSpaceRay = float2(positionScreen.x / proj._11,
                                        positionScreen.y / proj._22);
     
-        float3 positionView = float3(0.0f);
-        positionView.z = viewSpaceZ;
-        // Solve the two projection equations
-        positionView.xy = screenSpaceRay.xy * positionView.z;
-    
+        float3 positionView = float3(
+            // Solve the two projection equations
+            screenSpaceRay.xy * viewSpaceZ,
+            viewSpaceZ);
+
         return positionView;
     }
 
     float3 DecodeSphereMap(float2 e)
     {
-        float3 n = float3(0.0f);
         float2 tmp = e - e * e;
         float f = tmp.x + tmp.y;
         float m = sqrt(4.0f * f - 1.0f);
-        n.xy = m * (e * 4.0f - 2.0f);
-        n.z  = 3.0f - 8.0f * f;
+        float3 n = float3(
+            m * (e * 4.0f - 2.0f),
+            3.0f - 8.0f * f);
         return n;
     }
 

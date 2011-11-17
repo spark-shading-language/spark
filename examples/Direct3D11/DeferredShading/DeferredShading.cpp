@@ -75,7 +75,7 @@ bool gUseSpark = false;
 spark::IContext* gSparkContext = nullptr;
 Forward* gForwardSpark = nullptr;
 GenerateGBuffer* gGenerateGBufferSpark= nullptr;
-
+DirectionalLightGBuffer * gDirectionalLightGBuffer = nullptr;
 
 
 struct CB_VS_PER_OBJECT
@@ -702,6 +702,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     // SPARK:
     gForwardSpark = gSparkContext->CreateShaderInstance<Forward>( pd3dDevice );
     gGenerateGBufferSpark = gSparkContext->CreateShaderInstance<GenerateGBuffer>( pd3dDevice );
+    gDirectionalLightGBuffer = gSparkContext->CreateShaderInstance<DirectionalLightGBuffer>( pd3dDevice);
 
     return S_OK;
 }
@@ -811,60 +812,54 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
 
 void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device* pd3dDevice ) 
 {
-    // Clear
-//    const float zeros[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-//    d3dDeviceContext->ClearRenderTargetView(mLitBufferPS->GetRenderTarget(), zeros);
-        
-    // Full screen triangle setup
-    d3dDeviceContext->IASetInputLayout(0);
-    d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    d3dDeviceContext->IASetVertexBuffers(0, 0, 0, 0, 0);
-
-    d3dDeviceContext->VSSetShader(gFullScreenTriangleVS, 0, 0);
-    d3dDeviceContext->GSSetShader(0, 0, 0);
-
-//    d3dDeviceContext->RSSetState(mRasterizerState);
-//    d3dDeviceContext->RSSetViewports(1, viewport);
-
-//    d3dDeviceContext->PSSetConstantBuffers(0, 1, &mPerFrameConstants);
-    d3dDeviceContext->PSSetShaderResources(0, static_cast<UINT>(mGBufferSRV.size()), &mGBufferSRV.front());
-//    d3dDeviceContext->PSSetShaderResources(5, 1, &lightBufferSRV);
-
-    // Additively blend into back buffer
-//    ID3D11RenderTargetView * renderTargets[1] = {mLitBufferPS->GetRenderTarget()};
-//    d3dDeviceContext->OMSetRenderTargets(1, renderTargets, mDepthBufferReadOnlyDSV);
-//    d3dDeviceContext->OMSetBlendState(mLightingBlendState, 0, 0xFFFFFFFF);
-
-    // Do pixel frequency shading
-        // Get the light direction
+    auto pDSV = DXUTGetD3D11DepthStencilView();
+    auto pRTV = DXUTGetD3D11RenderTargetView();
     D3DXVECTOR3 vLightDir = g_LightControl.GetLightDirection();
-
     float fAmbient = 0.1f;
 
-    D3D11_MAPPED_SUBRESOURCE MappedResource;
-    d3dDeviceContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource );
-    CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
-    pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
-    d3dDeviceContext->Unmap( g_pcbPSPerFrame, 0 );
+    if (gUseSpark) {
+        gDirectionalLightGBuffer->GetFacet<UnpackGBuffer>()->SetNormalSpecularTexture( mGBufferSRV[0] );
+        gDirectionalLightGBuffer->GetFacet<UnpackGBuffer>()->SetAlbedoTexture( mGBufferSRV[1] );
+        gDirectionalLightGBuffer->GetFacet<UnpackGBuffer>()->SetZGradTexture( mGBufferSRV[2] );
+        gDirectionalLightGBuffer->GetFacet<UnpackGBuffer>()->SetZBufferTexture( mGBufferSRV[3] );
+        gDirectionalLightGBuffer->GetFacet<DirectionalLight>()->SetMyTarget(pRTV);
+        gDirectionalLightGBuffer->SetDepthStencilView( pDSV );
+        gDirectionalLightGBuffer->SetAmbient(fAmbient);
+        gDirectionalLightGBuffer->SetLightDir(Convert(vLightDir));
+        gDirectionalLightGBuffer->Submit(pd3dDevice, d3dDeviceContext); 
+    } else {
+        d3dDeviceContext->OMSetRenderTargets(1, &pRTV, pDSV);
+        // Full screen triangle setup
+        d3dDeviceContext->IASetInputLayout(0);
+        d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        d3dDeviceContext->IASetVertexBuffers(0, 0, 0, 0, 0);
 
-    d3dDeviceContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
+        d3dDeviceContext->VSSetShader(gFullScreenTriangleVS, 0, 0);
+        d3dDeviceContext->GSSetShader(0, 0, 0);
 
-    d3dDeviceContext->PSSetShader(gLightPS, 0, 0);
-//    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
-    d3dDeviceContext->Draw(3, 0);
+
+        d3dDeviceContext->PSSetShaderResources(0, static_cast<UINT>(mGBufferSRV.size()), &mGBufferSRV.front());
+
+        // Do pixel frequency shading
+            // Get the light direction
+
+        D3D11_MAPPED_SUBRESOURCE MappedResource;
+        d3dDeviceContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource );
+        CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
+        pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
+        d3dDeviceContext->Unmap( g_pcbPSPerFrame, 0 );
+
+        d3dDeviceContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
+
+        d3dDeviceContext->PSSetShader(gLightPS, 0, 0);
+    //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
+        d3dDeviceContext->Draw(3, 0);
+    }
 }
 
 void RenderDeferred( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice ) 
 {
     RenderGBuffer(pd3dImmediateContext, pd3dDevice);
-    auto pDSV = DXUTGetD3D11DepthStencilView();
-    auto pRTV = DXUTGetD3D11RenderTargetView();
-
-    if (gUseSpark) {
-//        ->GetFacet<DirectionalLight>()->SetMyTarget( pRTV );
-    } else {
-        pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
-    }
     RenderDeferredLighting(pd3dImmediateContext, pd3dDevice);
 }
 
@@ -942,6 +937,7 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
     // SPARK:
     SAFE_RELEASE( gForwardSpark );
     SAFE_RELEASE( gGenerateGBufferSpark);
+    SAFE_RELEASE( gDirectionalLightGBuffer );
 }
 
 
