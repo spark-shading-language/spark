@@ -239,7 +239,6 @@ float4 BasicLoop(FullScreenTriangleVSOut input, uint sampleIndex)
         float fLighting = saturate( dot( g_vLightDir, surface.normal) );
         fLighting = max( fLighting, g_fAmbient );
         return vDiffuse * fLighting;
-        return float4(surface.normal, 1.0f);
 
 //        // Avoid shading skybox/background pixels
 //        if (surface.positionView.z < mCameraNearFar.y) {
