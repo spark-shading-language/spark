@@ -239,5 +239,6 @@ float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
     float4 vDiffuse = surface.albedo;
         
     float fLighting = saturate( dot( g_vLightDir, surface.normal) );
+    //return float4(1.0f, 0.0, 0.0f, 1.0f);
     return vDiffuse * fLighting;
 }

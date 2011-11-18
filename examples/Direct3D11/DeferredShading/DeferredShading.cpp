@@ -61,6 +61,7 @@ ID3D11PixelShader*          gDirectionalLightPS = NULL;
 ID3D11PixelShader*          gSpotLightPS = NULL;
 
 ID3D11BlendState* mLightingBlendState;
+ID3D11DepthStencilState* mEqualStencilState;
 
 
 // DS
@@ -547,6 +548,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     SAFE_RELEASE( pVertexShaderBuffer );
     SAFE_RELEASE( pForwardPSBuffer );
     SAFE_RELEASE( pGBufferPSBuffer);
+    SAFE_RELEASE ( pSpotLightPSBuffer );
 
     // Load the mesh
     V_RETURN( g_Mesh11.Create( pd3dDevice, L"tiny\\tiny.sdkmesh", true ) );
@@ -577,6 +579,16 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
         desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
         desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
         pd3dDevice->CreateBlendState(&desc, &mLightingBlendState);
+    }
+    // Lighting depth stencil state.
+    {
+        CD3D11_DEPTH_STENCIL_DESC desc(
+            TRUE, D3D11_DEPTH_WRITE_MASK_ZERO, D3D11_COMPARISON_LESS_EQUAL,    // Depth
+            TRUE, 0xFF, 0xFF,                                                     // Stencil
+            D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_COMPARISON_EQUAL, // Front face stencil
+            D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_COMPARISON_EQUAL  // Back face stencil
+            );
+        pd3dDevice->CreateDepthStencilState(&desc, &mEqualStencilState);
     }
 
 
@@ -749,6 +761,7 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
         d3dDeviceContext->ClearRenderTargetView(pRTV, ClearColor );
         d3dDeviceContext->OMSetRenderTargets(1, &pRTV, pDSV);
         d3dDeviceContext->OMSetBlendState(mLightingBlendState, 0, 0xFFFFFFFF);
+        d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
 
         // Full screen triangle setup
         d3dDeviceContext->IASetInputLayout(0);
@@ -765,12 +778,18 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
             // Get the light direction
 
         D3D11_MAPPED_SUBRESOURCE MappedResource;
+        auto viewMat = *g_Camera.GetViewMatrix();
+        auto vDir = *g_SpotLight.GetLookAtPt() - *g_SpotLight.GetEyePt();
+        auto vSpotLightPosWorld = D3DXVECTOR4(*g_SpotLight.GetEyePt(), 1.0f) ;
+        D3DXVECTOR4 vSpotLightPosView;
+        D3DXVec4Transform(&vSpotLightPosView, &vSpotLightPosWorld, &viewMat);
+
         d3dDeviceContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource );
         CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
+        pPerFrame->m_CameraProj = *g_Camera.GetProjMatrix();
         pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
-        auto vDir = *g_SpotLight.GetLookAtPt() - *g_SpotLight.GetEyePt();
         pPerFrame->m_SpotLightDir = D3DXVECTOR4(vDir.x, vDir.y, vDir.z, 0.0f);
-        pPerFrame->m_SpotLightPos = D3DXVECTOR4(*g_SpotLight.GetEyePt(), 1.0f);
+        pPerFrame->m_SpotLightPos = vSpotLightPosView;
         pPerFrame->m_SpotLightParameters = D3DXVECTOR4(g_SpotLightFOV, g_SpotLightAspect, g_SpotLight.GetNearClip(), g_SpotLight.GetFarClip());
         d3dDeviceContext->Unmap( g_pcbPSPerFrame, 0 );
 
@@ -784,7 +803,11 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
     //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
         d3dDeviceContext->Draw(3, 0);
         d3dDeviceContext->OMSetBlendState(NULL, 0, 0xFFFFFFFF);
+        d3dDeviceContext->OMSetDepthStencilState(NULL, 0);
     }
+
+    ID3D11ShaderResourceView * pNullResources[4] = {NULL};
+    d3dDeviceContext->PSSetShaderResources(0, 4, pNullResources);
 }
 
 void RenderDeferred( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice ) 
@@ -860,6 +883,7 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
     SAFE_RELEASE( gGBufferPS );
     SAFE_RELEASE( gDirectionalLightPS);
     SAFE_RELEASE( mLightingBlendState );
+    SAFE_RELEASE( mEqualStencilState );
 
     SAFE_RELEASE( g_pcbVSPerObject );
     SAFE_RELEASE( g_pcbPSPerObject );
