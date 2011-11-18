@@ -19,6 +19,10 @@ cbuffer cbPerFrame : register( b1 )
     matrix      mCameraProj             : packoffset( c0);
 	float3		g_vLightDir				: packoffset( c4 );
 	float		g_fAmbient				: packoffset( c4.w );
+
+    float4      g_SpotLightPosView      : packoffset( c5 );
+    float4      g_SpotLightDir          : packoffset( c6 );
+    float4      g_SpotLightParams       : packoffset( c7 );
 };
 
 //--------------------------------------------------------------------------------------
@@ -79,6 +83,13 @@ SurfaceData ComputeSurfaceDataFromGeometry(PS_INPUT input)
 //--------------------------------------------------------------------------------------
 float4 PSMain( PS_INPUT Input ) : SV_TARGET
 {
+
+    SurfaceData surface = ComputeSurfaceDataFromGeometry( Input );
+    float3 d = 0.01f * surface.positionView;
+    return float4(d, 1.0f);
+
+
+
 	float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
 	
 	float fLighting = saturate( dot( g_vLightDir, Input.vNormal ) );
@@ -188,7 +199,8 @@ SurfaceData ComputeSurfaceDataFromGBufferSample(uint2 positionViewport, uint sam
     rawData.albedo = gGBufferTextures[1].Load(positionViewport.xy, sampleIndex).xyzw;
     rawData.positionZGrad = gGBufferTextures[2].Load(positionViewport.xy, sampleIndex).xy;
     float zBuffer = gGBufferTextures[3].Load(positionViewport.xy, sampleIndex).x;
-    
+
+
     float2 gbufferDim;
     uint dummy;
     gGBufferTextures[0].GetDimensions(gbufferDim.x, gbufferDim.y, dummy);
@@ -239,6 +251,9 @@ float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
     float4 vDiffuse = surface.albedo;
         
     float fLighting = saturate( dot( g_vLightDir, surface.normal) );
-    //return float4(1.0f, 0.0, 0.0f, 1.0f);
-    return vDiffuse * fLighting;
+    float d = 0.001f * distance(surface.positionView, g_SpotLightPosView);
+    return float4(d, d, d, 1.0f);
+//    float3 d = 0.01f * surface.positionView;
+//    return float4(d, 1.0f);
+    //return vDiffuse * fLighting;
 }
