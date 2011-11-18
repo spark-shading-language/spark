@@ -255,6 +255,8 @@ namespace spark
             template<typename TBase>
             TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
+        protected:
+        	D3D11DrawPass* _StaticCastImpl( void* ) { return this; }
         public:
             ID3D11DepthStencilView* m_depthStencilView;
         };
@@ -264,11 +266,12 @@ namespace spark
         public:
             static inline const char* StaticGetShaderClassName() { return "D3D11GeometryShader"; }
 
-            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
-
             template<typename TBase>
             TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
+        protected:
+        	D3D11GeometryShader* _StaticCastImpl( void* ) { return this; }
+            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
         public:
             D3D11DrawPass *_Base_D3D11DrawPass;
         };
@@ -278,11 +281,12 @@ namespace spark
         public:
             static inline const char* StaticGetShaderClassName() { return "D3D11NullTessellation"; }
 
-            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
-
             template<typename TBase>
             TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
+        protected:
+        	D3D11NullTessellation* _StaticCastImpl( void* ) { return this; }
+            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
         public:
             D3D11DrawPass *_Base_D3D11DrawPass;
         };
@@ -292,11 +296,12 @@ namespace spark
         public:
             static inline const char* StaticGetShaderClassName() { return "D3D11Tessellation"; }
 
-            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
-
             template<typename TBase>
             TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
+        protected:
+        	D3D11Tessellation* _StaticCastImpl( void* ) { return this; }
+            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
         public:
             D3D11DrawPass *_Base_D3D11DrawPass;
         };
@@ -306,12 +311,13 @@ namespace spark
         public:
             static inline const char* StaticGetShaderClassName() { return "D3D11QuadTessellation"; }
 
-            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
-            D3D11Tessellation * _StaticCastImpl( D3D11Tessellation * ) { return _Mixin_D3D11Tessellation; }
-
             template<typename TBase>
             TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
+        protected:
+        	D3D11QuadTessellation* _StaticCastImpl( void* ) { return this; }
+            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
+            D3D11Tessellation * _StaticCastImpl( D3D11Tessellation * ) { return _Mixin_D3D11Tessellation; }
         public:
             D3D11DrawPass *_Base_D3D11DrawPass;
             D3D11Tessellation *_Mixin_D3D11Tessellation;
@@ -322,12 +328,13 @@ namespace spark
         public:
             static inline const char* StaticGetShaderClassName() { return "D3D11TriTessellation"; }
 
-            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
-            D3D11Tessellation * _StaticCastImpl( D3D11Tessellation * ) { return _Mixin_D3D11Tessellation; }
-
             template<typename TBase>
             TBase* StaticCast() { return _StaticCastImpl(static_cast<TBase*>(nullptr)); }
 
+        protected:
+        	D3D11TriTessellation* _StaticCastImpl( void* ) { return this; }
+            D3D11DrawPass * _StaticCastImpl( D3D11DrawPass * ) { return _Base_D3D11DrawPass; }
+            D3D11Tessellation * _StaticCastImpl( D3D11Tessellation * ) { return _Mixin_D3D11Tessellation; }
         public:
             D3D11DrawPass *_Base_D3D11DrawPass;
             D3D11Tessellation *_Mixin_D3D11Tessellation;

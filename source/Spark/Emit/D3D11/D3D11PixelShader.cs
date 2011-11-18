@@ -44,9 +44,13 @@ namespace Spark.Emit.D3D11
 
                 EmitClass.WrapperWriteLine("");
                 EmitClass.WrapperWriteLine("// output @Pixel {0} {1}", a.Type, a.Name);
+
+                var attrType = EmitTarget.GetOpaqueType("ID3D11RenderTargetView*");
+                var attrName = a.Name.ToString();
+
                 var attrField = EmitClass.AddFieldAndAccessors(
-                    EmitTarget.GetOpaqueType("ID3D11RenderTargetView*"),
-                    a.Name.ToString());
+                    attrType,
+                    attrName);
 
                 // \todo: Associate that field with the attribute...
                 EmitPass.ShaderClassEnv.Insert(
@@ -60,7 +64,9 @@ namespace Spark.Emit.D3D11
                     a,
                     (b, shaderObj) => b.GetArrow(
                             shaderObj,
-                            attrField));
+                            attrField),
+                    attrType,
+                    attrName);
             }
         }
 

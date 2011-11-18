@@ -179,6 +179,9 @@ namespace Spark.Emit
         {
             public MidAttributeDecl AttributeDecl { get; set; }
             public Func<IEmitBlock, IEmitVal, IEmitVal> Accessor { get; set; }
+
+            public IEmitType Type { get; set; }
+            public string Name { get; set; }
         }
 
         public class ShaderFacetMixinInfo
@@ -206,7 +209,9 @@ namespace Spark.Emit
             public void BindAttribute(
                 MidFacetDecl midFacet,
                 MidAttributeDecl midAttr,
-                Func<IEmitBlock, IEmitVal, IEmitVal> accessor)
+                Func<IEmitBlock, IEmitVal, IEmitVal> accessor,
+                IEmitType type,
+                string name )
             {
                 int ii = 0;
                 foreach (var a in midFacet.Attributes)
@@ -217,6 +222,8 @@ namespace Spark.Emit
                         {
                             AttributeDecl = midAttr,
                             Accessor = accessor,
+                            Type = type,
+                            Name = name,
                         };
                         return;
                     }
@@ -312,6 +319,8 @@ namespace Spark.Emit
                         (b, shaderObj) => b.GetArrow(
                             shaderObj,
                             attrField);
+                    attrInfo.Type = attrType;
+                    attrInfo.Name = attrName;
 
                     attributeInfos[ii] = attrInfo;
                 }
@@ -346,6 +355,28 @@ namespace Spark.Emit
                     return;
                 }
                 ++ii;
+            }
+        }
+
+        private void AddForwardingAccessors(
+            IEmitClass emitClass,
+            ShaderFacetInfo baseFacet )
+        {
+            var baseClass = _mapShaderClassToInfo[baseFacet.OriginalClass];
+
+            var baseAttrs = baseFacet.Attributes;
+            var baseAttrCount = baseAttrs.Length;
+
+            for (int ii = 0; ii < baseAttrCount; ++ii)
+            {
+                var baseAttrInfo = baseAttrs[ii];
+                if (baseAttrInfo == null)
+                    continue;
+
+                emitClass.AddForwardingFieldAccessors(
+                    baseClass.InterfaceClass,
+                    baseAttrInfo.Type,
+                    baseAttrInfo.Name);
             }
         }
 
@@ -387,6 +418,8 @@ namespace Spark.Emit
                     Accessor = (b, shaderObj) =>
                         baseAttrAccessor(b,
                             derivedFacetInfo.FacetAccessor(b, shaderObj)),
+                    Type = baseAttrInfo.Type,
+                    Name = baseAttrInfo.Name,
                 };
 
                 derivedFacetInfo.Attributes[ii] = attrInfo;
@@ -546,11 +579,6 @@ namespace Spark.Emit
                         fieldType,
                         fieldName );
 
-                    ifaceClass.WrapperWriteLineProtected(
-                        "{0} _StaticCastImpl( {0} ) {{ return {1}; }}",
-                        fieldType.ToString(),
-                        fieldName );
-
                     info.DirectFacet.Mixins.Add(
                         new ShaderFacetMixinInfo(
                             primaryBaseInfo.MidClassDecl,
@@ -561,6 +589,24 @@ namespace Spark.Emit
                         primaryBaseInfo,
                         ( b, shaderObj ) =>
                             b.GetArrow( shaderObj, facetField ) );
+
+
+                    foreach (var bf in primaryBaseInfo.AllFacets)
+                    {
+                        var baseFacet = bf; // avoid capture
+
+                        AddForwardingAccessors(
+                            info.InterfaceClass,
+                            baseFacet);
+
+                        var baseClass = _mapShaderClassToInfo[baseFacet.OriginalClass];
+
+                        ifaceClass.WrapperWriteLineProtected(
+                            "{0}* _StaticCastImpl( {0}* ) {{ return {1}; }}",
+                            baseClass.InterfaceClass.GetName(),
+                            fieldName);
+
+                    }
                 }
             }
 
@@ -619,6 +665,10 @@ namespace Spark.Emit
                     info,
                     facetClassInfo.DirectFacet,
                     (b, shaderObj) => b.GetArrow(shaderObj, field));
+
+                AddForwardingAccessors(
+                    info.InterfaceClass,
+                    facetClassInfo.DirectFacet);
             }
 
             /*
@@ -1255,7 +1305,7 @@ namespace Spark.Emit
                 var accessorName = CapitalizeFieldName(name);
 
                 emitClassCPP.PublicSpan.WriteLine(
-                    "{0} Get{1}() const {{ return {2}; }}",
+                    "{0} Get{1}() {{ return {2}; }}",
                     fieldType.ToString(),
                     accessorName,
                     fieldName);
@@ -1268,6 +1318,32 @@ namespace Spark.Emit
             }
 
             return field;
+        }
+
+        public static void AddForwardingFieldAccessors(
+            this IEmitClass emitClass,
+            IEmitClass baseClass,
+            IEmitType fieldType,
+            string name)
+        {
+            if (emitClass is Emit.CPlusPlus.EmitClassCPP)
+            {
+                var emitClassCPP = (Emit.CPlusPlus.EmitClassCPP)emitClass;
+
+                var accessorName = CapitalizeFieldName(name);
+
+                emitClassCPP.PublicSpan.WriteLine(
+                    "{0} Get{1}() {{ return StaticCast<{2}>()->Get{1}(); }}",
+                    fieldType.ToString(),
+                    accessorName,
+                    baseClass.GetName());
+
+                emitClassCPP.PublicSpan.WriteLine(
+                    "void Set{1}( {0} value ) {{ StaticCast<{2}>()->Set{1}( value ); }}",
+                    fieldType.ToString(),
+                    accessorName,
+                    baseClass.GetName());
+            }
         }
 
         private static string CapitalizeFieldName(

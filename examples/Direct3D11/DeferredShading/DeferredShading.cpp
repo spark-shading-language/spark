@@ -168,9 +168,9 @@ void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice
 
 
     if (gUseSpark) {
-        gGenerateGBufferSpark->StaticCast<PackGBuffer>()->SetNormalSpecularTarget( mGBufferRTV[0] );
-        gGenerateGBufferSpark->StaticCast<PackGBuffer>()->SetAlbedoTarget( mGBufferRTV[1] );
-        gGenerateGBufferSpark->StaticCast<PackGBuffer>()->SetPositionZGradTarget( mGBufferRTV[2] );
+        gGenerateGBufferSpark->SetNormalSpecularTarget( mGBufferRTV[0] );
+        gGenerateGBufferSpark->SetAlbedoTarget( mGBufferRTV[1] );
+        gGenerateGBufferSpark->SetPositionZGradTarget( mGBufferRTV[2] );
     }
     else {
         d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), &mGBufferRTV.front(), mDepthBuffer->GetDepthStencil());
@@ -818,11 +818,11 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
     float fAmbient = 0.1f;
 
     if (gUseSpark) {
-        gDirectionalLightGBuffer->StaticCast<UnpackGBuffer>()->SetNormalSpecularTexture( mGBufferSRV[0] );
-        gDirectionalLightGBuffer->StaticCast<UnpackGBuffer>()->SetAlbedoTexture( mGBufferSRV[1] );
-        gDirectionalLightGBuffer->StaticCast<UnpackGBuffer>()->SetZGradTexture( mGBufferSRV[2] );
-        gDirectionalLightGBuffer->StaticCast<UnpackGBuffer>()->SetZBufferTexture( mGBufferSRV[3] );
-        gDirectionalLightGBuffer->StaticCast<DirectionalLight>()->SetMyTarget(pRTV);
+        gDirectionalLightGBuffer->SetNormalSpecularTexture( mGBufferSRV[0] );
+        gDirectionalLightGBuffer->SetAlbedoTexture( mGBufferSRV[1] );
+        gDirectionalLightGBuffer->SetZGradTexture( mGBufferSRV[2] );
+        gDirectionalLightGBuffer->SetZBufferTexture( mGBufferSRV[3] );
+        gDirectionalLightGBuffer->SetMyTarget(pRTV);
         gDirectionalLightGBuffer->SetDepthStencilView( pDSV );
         gDirectionalLightGBuffer->SetAmbient(fAmbient);
         gDirectionalLightGBuffer->SetLightDir(Convert(vLightDir));
@@ -946,7 +946,7 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
     ID3D11RenderTargetView* pRTV = DXUTGetD3D11RenderTargetView();
     ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
     if (gUseSpark) {
-        gForwardSpark->StaticCast<DirectionalLight>()->SetMyTarget( pRTV );
+        gForwardSpark->SetMyTarget( pRTV );
     }
     RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, gForwardPS, gForwardSpark);
 }
