@@ -206,3 +206,17 @@ abstract mixin shader class FullScreenTriangle extends D3D11DrawPass
 
 shader class DirectionalLightGBuffer extends FullScreenTriangle, UnpackGBuffer, DirectionalLight
 {}
+
+abstract mixin shader class SpotLight
+    extends Base, SurfaceAttributes
+{
+
+    //@Fragment float4 color = float4(normal, 1.0f);
+    // @Pixel
+    //
+    @Fragment float4 diffuse  = albedo;
+    @Fragment float  lighting = max(saturate(dot(lightDir, normal)), ambient);
+    @Fragment float4 color    = diffuse * lighting ;
+
+    output @Pixel float4 myTarget = color;
+}

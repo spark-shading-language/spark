@@ -221,40 +221,23 @@ SurfaceData ComputeSurfaceDataFromGBufferSample(uint2 positionViewport, uint sam
     return data;
 }
 
-float4 BasicLoop(FullScreenTriangleVSOut input, uint sampleIndex)
-{
-    // How many total lights?
-//    uint totalLights, dummy;
-//    gLight.GetDimensions(totalLights, dummy);
-//    
-//    float3 lit = float3(0.0f, 0.0f, 0.0f);
-//
-//    [branch] if (mUI.visualizeLightCount) {
-//        lit = (float(totalLights) * rcp(255.0f)).xxx;
-//    } else {
 
-        SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), sampleIndex);
-        float4 vDiffuse = surface.albedo;
+
+float4 DirectionalLightPS(FullScreenTriangleVSOut input) : SV_Target
+{
+    SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), 0);
+    float4 vDiffuse = surface.albedo;
         
-        float fLighting = saturate( dot( g_vLightDir, surface.normal) );
-        fLighting = max( fLighting, g_fAmbient );
-        return vDiffuse * fLighting;
-
-//        // Avoid shading skybox/background pixels
-//        if (surface.positionView.z < mCameraNearFar.y) {
-//            for (uint lightIndex = 0; lightIndex < totalLights; ++lightIndex) {
-//                PointLight light = gLight[lightIndex];
-//                AccumulateBRDF(surface, light, lit);
-//            }
-//        }
-//    }
-     
-//    return float4(lit, 1.0f);
+    float fLighting = saturate( dot( g_vLightDir, surface.normal) );
+    fLighting = max( fLighting, g_fAmbient );
+    return vDiffuse * fLighting;
 }
 
-float4 LightPS(FullScreenTriangleVSOut input) : SV_Target
+float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
 {
-    // Shade only sample 0
-    return BasicLoop(input, 0);
+    SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), 0);
+    float4 vDiffuse = surface.albedo;
+        
+    float fLighting = saturate( dot( g_vLightDir, surface.normal) );
+    return vDiffuse * fLighting;
 }
-
