@@ -744,6 +744,11 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
     auto pDSV = DXUTGetD3D11DepthStencilView();
     auto pRTV = DXUTGetD3D11RenderTargetView();
     D3DXVECTOR3 vLightDir = g_LightControl.GetLightDirection();
+    D3DXVECTOR4 vLightDir4 = D3DXVECTOR4(vLightDir, 0.0f);
+    D3DXVec4Transform(&vLightDir4, &vLightDir4, g_Camera.GetViewMatrix());
+    vLightDir = D3DXVECTOR3(vLightDir4);
+
+
     float fAmbient = 0.1f;
 
     if (gUseSpark) {
@@ -799,7 +804,7 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
 
         d3dDeviceContext->PSSetShader(gDirectionalLightPS, 0, 0);
     //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
-//        d3dDeviceContext->Draw(3, 0);
+        d3dDeviceContext->Draw(3, 0);
 
         d3dDeviceContext->PSSetShader(gSpotLightPS, 0, 0);
     //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
@@ -1078,6 +1083,9 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     mProj = *g_Camera.GetProjMatrix();
     mView = *g_Camera.GetViewMatrix();
     
+    D3DXVECTOR4 vLightDir4 = D3DXVECTOR4(vLightDir, 0.0f);
+    D3DXVec4Transform(&vLightDir4, &vLightDir4, &mView);
+    vLightDir = D3DXVECTOR3(vLightDir4);
 
     // D3D11:
     if(!gUseSpark)

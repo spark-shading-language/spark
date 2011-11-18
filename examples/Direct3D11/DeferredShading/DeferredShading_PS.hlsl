@@ -84,15 +84,13 @@ SurfaceData ComputeSurfaceDataFromGeometry(PS_INPUT input)
 float4 PSMain( PS_INPUT Input ) : SV_TARGET
 {
 
-    SurfaceData surface = ComputeSurfaceDataFromGeometry( Input );
-    float3 d = 0.01f * surface.positionView;
-    return float4(d, 1.0f);
-
-
+//    SurfaceData surface = ComputeSurfaceDataFromGeometry( Input );
+//    float3 d = 0.01f * surface.positionView;
+//    return float4(d, 1.0f);
 
 	float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
 	
-	float fLighting = saturate( dot( g_vLightDir, Input.vNormal ) );
+	float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
 	fLighting = max( fLighting, g_fAmbient );
 	return vDiffuse * fLighting;
 
@@ -250,10 +248,8 @@ float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
     SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), 0);
     float4 vDiffuse = surface.albedo;
         
-    float fLighting = saturate( dot( g_vLightDir, surface.normal) );
-    float d = 0.001f * distance(surface.positionView, g_SpotLightPosView);
-    return float4(d, d, d, 1.0f);
-//    float3 d = 0.01f * surface.positionView;
-//    return float4(d, 1.0f);
-    //return vDiffuse * fLighting;
+    float d = distance(surface.positionView, g_SpotLightPosView.xyz);
+    float3 lightDirView = normalize(g_SpotLightPosView.xyz - surface.positionView);
+    float fLighting = saturate(dot(lightDirView, surface.normal));
+    return vDiffuse * fLighting;
 }
