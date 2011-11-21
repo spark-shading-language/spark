@@ -22,6 +22,10 @@ using Spark.Mid;
 
 namespace Spark.Emit.D3D11
 {
+    public class D3D11InputAssemblerOperationTooComplex : Exception
+    {
+    }
+
     public class D3D11InputAssembler : D3D11Stage
     {
 //        private MidElementDecl _uniformElement;
@@ -37,21 +41,24 @@ namespace Spark.Emit.D3D11
 
         IEmitField inputLayoutField;
 
+        private MidAttributeDecl _vertexIDAttr = null;
+        private MidAttributeDecl _instanceIDAttr = null;
+
         public override void EmitImplSetup()
         {
             var uniformElement = GetElement("Uniform");
             var iaElement = GetElement("AssembledVertex");
 
-            var vertexID = GetAttribute(iaElement, "IA_VertexID");
-            var instanceID = GetAttribute(iaElement, "IA_InstanceID");
+            _vertexIDAttr = GetAttribute(iaElement, "IA_VertexID").Attribute;
+            _instanceIDAttr = GetAttribute(iaElement, "IA_InstanceID").Attribute;
 
-            _info[vertexID.Attribute] = new IndexSourceInfo
+            _info[_vertexIDAttr] = new IndexSourceInfo(_vertexIDAttr.Range)
             {
                 InputSlotClass = InitBlock.Enum32("D3D11_INPUT_CLASSIFICATION", "D3D11_INPUT_PER_VERTEX_DATA", D3D11_INPUT_CLASSIFICATION.D3D11_INPUT_PER_VERTEX_DATA),
                 StepRate = 0
             };
 
-            _info[ instanceID.Attribute ] = new IndexSourceInfo
+            _info[_instanceIDAttr] = new IndexSourceInfo(_instanceIDAttr.Range)
             {
                 InputSlotClass = InitBlock.Enum32("D3D11_INPUT_CLASSIFICATION", "D3D11_INPUT_PER_INSTANCE_DATA", D3D11_INPUT_CLASSIFICATION.D3D11_INPUT_PER_INSTANCE_DATA),
                 StepRate = 1
@@ -61,10 +68,9 @@ namespace Spark.Emit.D3D11
 
             var inputElementInits = (from a in iaElement.Attributes
                      where a.IsOutput
-                     where a != vertexID.Attribute
-                     where a != instanceID.Attribute
                      let name = SharedHLSL.MapName(a)
-                     let attrInfo = DecomposeAttr(a)
+                     let attrInfo = TryDecomposeAttr(a.Range, a)
+                     where attrInfo != null
                      from e in DeclareInputElements(InitBlock, name, attrInfo)
                      select e).ToArray();
 
@@ -180,10 +186,25 @@ namespace Spark.Emit.D3D11
 
         private class AttributeInfo
         {
+            public AttributeInfo(
+                SourceRange range)
+            {
+                _range = range;
+            }
+
+            public SourceRange Range { get { return _range; } set { _range = value; } }
+
+            private SourceRange _range;
         }
 
         private class InputElementInfo : AttributeInfo
         {
+            public InputElementInfo(
+                SourceRange range)
+                : base(range)
+            {
+            }
+
             public string Name { get; set; }
             public IEmitVal Format { get; set; }
             public int InputSlotIndex { get; set; }
@@ -193,6 +214,12 @@ namespace Spark.Emit.D3D11
 
         private class IndexSourceInfo : AttributeInfo
         {
+            public IndexSourceInfo(
+                SourceRange range)
+                : base(range)
+            {
+            }
+
             public IEmitVal InputSlotClass { get; set; }
             public int StepRate { get; set; }
         }
@@ -205,34 +232,68 @@ namespace Spark.Emit.D3D11
 
         private class StructInfo : AttributeInfo
         {
+            public StructInfo(
+                SourceRange range)
+                : base(range)
+            {
+            }
+
             public FieldInfo[] Fields { get; set; }
         }
 
         private Dictionary<MidAttributeDecl, AttributeInfo> _info = new Dictionary<MidAttributeDecl, AttributeInfo>();
 
-        private AttributeInfo DecomposeAttr(
+        private AttributeInfo TryDecomposeAttr(
+            SourceRange range,
             MidAttributeDecl midAttrDecl)
         {
-            return _info.Cache(midAttrDecl,
-                () => DecomposeAttr(midAttrDecl.Exp));
+            try
+            {
+                return DecomposeAttr(range, midAttrDecl);
+            }
+            catch (D3D11InputAssemblerOperationTooComplex)
+            {
+                return null;
+            }
+        }
+
+
+        private AttributeInfo DecomposeAttr(
+            SourceRange range,
+            MidAttributeDecl midAttrDecl)
+        {
+            var attrInfo = _info.Cache(midAttrDecl,
+                () => DecomposeAttr(range, midAttrDecl.Exp));
+            attrInfo.Range = range;
+            return attrInfo;
         }
 
         private AttributeInfo DecomposeAttr(
-            MidExp exp )
+            SourceRange range,
+            MidExp exp)
         {
-            return DecomposeAttrImpl((dynamic)exp);
+            return DecomposeAttrImpl(range, (dynamic)exp);
         }
 
         private AttributeInfo DecomposeAttrImpl(
+            SourceRange range,
+            MidExp exp)
+        {
+            throw OperationTooComplex(exp.Range);
+        }
+
+        private AttributeInfo DecomposeAttrImpl(
+            SourceRange range,
             MidAttributeRef midAttrRef)
         {
-            return DecomposeAttr(midAttrRef.Decl);
+            return DecomposeAttr(range, midAttrRef.Decl);
         }
 
         private AttributeInfo DecomposeAttrImpl(
+            SourceRange range,
             MidFieldRef midFieldRef)
         {
-            var structAttrInfo = (StructInfo)DecomposeAttr(midFieldRef.Obj);
+            var structAttrInfo = (StructInfo)DecomposeAttr(midFieldRef.Range, midFieldRef.Obj);
 
             var fieldInfo = (from f in structAttrInfo.Fields
                              where f.Field == midFieldRef.Decl
@@ -242,6 +303,7 @@ namespace Spark.Emit.D3D11
         }
 
         private AttributeInfo DecomposeAttrImpl(
+            SourceRange range,
             MidBuiltinApp midApp)
         {
             var name = midApp.Decl.GetTemplate("hlsl");
@@ -254,9 +316,10 @@ namespace Spark.Emit.D3D11
                 var index = args[3];
 
                 var inputVertexStream = DecomposeVertexStream(buffer, offset, stride);
-                var inputIndex = DecomposeAttr(index);
+                var inputIndex = DecomposeAttr(midApp.Range, index);
 
                 return GenerateInputElements(
+                    midApp.Range,
                     "",
                     midApp.Type,
                     inputVertexStream,
@@ -290,10 +353,25 @@ namespace Spark.Emit.D3D11
                 }*/
             }
 
-            throw new NotImplementedException();
+            throw OperationTooComplex(midApp.Range);
+        }
+
+        private D3D11InputAssemblerOperationTooComplex OperationTooComplex(SourceRange range)
+        {
+            Diagnostics.Add(
+                Severity.Error,
+                range,
+                "This operation is too complex for the D3D11 Input Assembler (IA) stage");
+            Diagnostics.Add(
+                Severity.Info,
+                range,
+                "Consider using the @CoarseVertex rate to map computations to the Vertex Shader (VS)");
+
+            return new D3D11InputAssemblerOperationTooComplex();
         }
 
         private AttributeInfo GenerateInputElements(
+            SourceRange range,
             string name,
             MidType type,
             int vertexStream,
@@ -301,6 +379,7 @@ namespace Spark.Emit.D3D11
             UInt32 baseOffset)
         {
             return GenerateInputElementsImpl(
+                range,
                 name,
                 (dynamic)type,
                 vertexStream,
@@ -310,6 +389,18 @@ namespace Spark.Emit.D3D11
         }
 
         private AttributeInfo GenerateInputElementsImpl(
+            SourceRange range,
+            string name,
+            MidType type,
+            int vertexStream,
+            AttributeInfo index,
+            UInt32 baseOffset)
+        {
+            throw OperationTooComplex(range);
+        }
+
+        private AttributeInfo GenerateInputElementsImpl(
+            SourceRange range,
             string name,
             MidStructRef type,
             int vertexStream,
@@ -327,6 +418,7 @@ namespace Spark.Emit.D3D11
                 {
                     Field = f,
                     Info = GenerateInputElements(
+                      range,
                       string.Format("{0}_{1}", name, f.Name.ToString()),
                       f.Type,
                       vertexStream,
@@ -337,10 +429,11 @@ namespace Spark.Emit.D3D11
                 totalOffset += GetSizeOf(f.Type);
             }
 
-            return new StructInfo { Fields = fields.ToArray() };
+            return new StructInfo(range) { Fields = fields.ToArray() };
         }
 
         private AttributeInfo GenerateInputElementsImpl(
+            SourceRange range,
             string name,
             MidBuiltinType type,
             int vertexStream,
@@ -350,7 +443,7 @@ namespace Spark.Emit.D3D11
         {
             var format = MapBuiltinTypeFormat(type);
 
-            return new InputElementInfo
+            return new InputElementInfo(range)
             {
                 Name = name,
                 Format = format,
@@ -400,10 +493,60 @@ namespace Spark.Emit.D3D11
             string name,
             AttributeInfo info)
         {
-            return DeclareInputElementsImpl(
-                block,
-                name,
-                (dynamic)info);
+            try
+            {
+                return DeclareInputElementsImpl(
+                    block,
+                    name,
+                    (dynamic)info);
+            }
+            catch (D3D11InputAssemblerOperationTooComplex)
+            {
+                return new IEmitVal[] { };
+            }
+        }
+
+        private IEnumerable<IEmitVal> DeclareInputElementsImpl(
+            IEmitBlock block,
+            string name,
+            AttributeInfo info)
+        {
+            // Default behavior is to emit an error: this value cannot (apparently)
+            // be plumbed from the IA to the VS.
+            //
+            // We detect IA_VertexID and IA_IntanceID as special cases, since
+            // they are so pervasive:
+            if (info == _info[_vertexIDAttr])
+            {
+                Diagnostics.Add(
+                    Severity.Error,
+                    info.Range,
+                    "The built-in attribute IA_VertexID cannot be plumbed from the D3D11 Input Assembler (IA) stage to the Vertex Shader (VS)");
+                Diagnostics.Add(
+                    Severity.Info,
+                    info.Range,
+                    "Consider using the equivalent VS-stage attribute VS_VertexID");
+            }
+            else if (info == _info[_instanceIDAttr])
+            {
+                Diagnostics.Add(
+                    Severity.Error,
+                    info.Range,
+                    "The built-in attribute IA_InstanceID cannot be plumbed from the D3D11 Input Assembler (IA) stage to the Vertex Shader (VS)");
+                Diagnostics.Add(
+                    Severity.Info,
+                    info.Range,
+                    "Consider using the equivalent VS-stage attribute VS_InstanceID");
+            }
+            else
+            {
+                Diagnostics.Add(
+                    Severity.Error,
+                    info.Range,
+                    "This value cannot be plumbed from the D3D11 Input Assembler (IA) stage to the Vertex Shader (VS)");
+            }
+
+            throw new D3D11InputAssemblerOperationTooComplex();
         }
 
         private IEnumerable<IEmitVal> DeclareInputElementsImpl(
