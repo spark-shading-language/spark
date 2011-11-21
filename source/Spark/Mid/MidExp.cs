@@ -23,9 +23,9 @@ namespace Spark.Mid
 
     public class MidLitFactory<T> : MidLitFactory
     {
-        public MidLit Lit( T value, MidType type )
+        public MidLit Lit(SourceRange range, T value, MidType type)
         {
-            return _values.Cache( value, () => new MidLit<T>( value, type ) );
+            return _values.Cache( value, () => new MidLit<T>( range, value, type ) );
         }
 
         private Dictionary<T, MidLit> _values = new Dictionary<T,MidLit>();
@@ -67,45 +67,49 @@ namespace Spark.Mid
             _lazyFactory = lazyFactory;
         }
 
-        public MidLit Lit<T>( T value, MidType type )
+        public MidLit Lit<T>(SourceRange range, T value, MidType type)
         {
             var lits = (MidLitFactory<T>) _litFactories.Cache(
                 typeof( T ),
                 () => (MidLitFactory) new MidLitFactory<T>() );
-            return lits.Lit( value, type );
+            return lits.Lit( range, value, type );
         }
 
         public MidExp MethodApp(
+            SourceRange range,
             MidMethodDecl method,
             IEnumerable<MidVal> args )
         {
             return _methodApps.Get( method ).GetList( args ).Cache(
-                () => new MidMethodApp( method, args ) );
+                () => new MidMethodApp( range, method, args ) );
         }
 
         public MidAttributeRef AttributeRef(
-            MidAttributeDecl attr )
+            SourceRange range,
+            MidAttributeDecl attr)
         {
             return (MidAttributeRef) _attrRefs.Get( attr ).Cache(
-                () => new MidAttributeRef(attr, _lazyFactory));
+                () => new MidAttributeRef(range, attr, _lazyFactory));
         }
 
         public MidVoidExp Void { get { return _void; } }
 
         public MidAttributeFetch AttributeFetch(
+            SourceRange range,
             MidPath obj,
             MidAttributeDecl attribute )
         {
             return (MidAttributeFetch) _attrFetches.Get( obj ).Get( attribute ).Cache(
-                () => new MidAttributeFetch(obj, attribute, _lazyFactory));
+                () => new MidAttributeFetch(range, obj, attribute, _lazyFactory));
         }
 
         public MidFieldRef FieldRef(
+            SourceRange range,
             MidPath obj,
             MidFieldDecl decl )
         {
             return (MidFieldRef) _fieldRefs.Get( obj ).Get( decl ).Cache(
-                () => new MidFieldRef( obj, decl ) );
+                () => new MidFieldRef( range, obj, decl ) );
         }
 
         private Dictionary<Type, MidLitFactory> _litFactories = new Dictionary<Type, MidLitFactory>();
@@ -114,29 +118,34 @@ namespace Spark.Mid
         private MidTreeCache _attrFetches = new MidTreeCache();
         private MidTreeCache _fieldRefs = new MidTreeCache();
 
-        private MidVoidExp _void = new MidVoidExp();
+        private MidVoidExp _void = new MidVoidExp(new SourceRange());
     }
 
     public abstract class MidExp
     {
         public MidExp(
+            SourceRange range,
             MidType type)
         {
             if (type == null)
                 throw new ArgumentNullException("type");
+            _range = range;
             _type = type;
         }
 
+        public SourceRange Range { get { return _range; } }
         public virtual MidType Type { get { return _type; } }
 
+        private SourceRange _range;
         private MidType _type;
     }
 
     public abstract class MidPath : MidExp
     {
         public MidPath(
+            SourceRange range,
             MidType type)
-            : base(type)
+            : base(range, type)
         {
         }
     }
@@ -144,8 +153,9 @@ namespace Spark.Mid
     public abstract class MidVal : MidPath
     {
         public MidVal(
+            SourceRange range,
             MidType type)
-            : base(type)
+            : base(range, type)
         {
         }
     }
@@ -153,16 +163,20 @@ namespace Spark.Mid
     public abstract class MidLit : MidVal
     {
         public MidLit(
+            SourceRange range,
             MidType type)
-            : base(type)
+            : base(range, type)
         {
         }
     }
 
     public class MidLit<T> : MidLit
     {
-        public MidLit(T value, MidType type)
-            : base(type)
+        public MidLit(
+            SourceRange range,
+            T value,
+            MidType type)
+            : base(range,type)
         {
             _value = value;
         }
@@ -180,9 +194,10 @@ namespace Spark.Mid
     public class MidMethodApp : MidExp
     {
         public MidMethodApp(
+            SourceRange range,
             MidMethodDecl decl,
             IEnumerable<MidVal> args)
-            : base(decl.ResultType)
+            : base(range, decl.ResultType)
         {
             _decl = decl;
             _args = args.ToArray();
@@ -221,18 +236,20 @@ namespace Spark.Mid
     public class MidAttributeRef : MidVal
     {
         public MidAttributeRef(
+            SourceRange range,
             MidAttributeDecl decl,
             ILazyFactory lazyFactory)
-            : base(new MidDummyType())
+            : base(range, new MidDummyType())
         {
             _type = lazyFactory.New(() => Decl.Type);
             _decl = Lazy.Value(decl);
         }
 
         public MidAttributeRef(
+            SourceRange range,
             MidType type,
             ILazy<MidAttributeDecl> decl)
-            : base(new MidDummyType())
+            : base(range, new MidDummyType())
         {
             _type = Lazy.Value(type);
             _decl = decl;
@@ -264,16 +281,15 @@ namespace Spark.Mid
     public class MidForExp : MidExp
     {
         public MidForExp(
+            SourceRange range,
             MidVar var,
             MidVal seq,
-            MidExp body,
-            SourceRange range)
-            : base(new MidVoidType())
+            MidExp body )
+            : base(range, new MidVoidType())
         {
             _var = var;
             _seq = seq;
             _body = body;
-            _range = range;
         }
 
         public MidVar Var
@@ -293,25 +309,21 @@ namespace Spark.Mid
             set { _body = value; }
         }
 
-        public SourceRange Range { get { return _range; } }
-
         private MidVar _var;
         private MidVal _seq;
         private MidExp _body;
-        private SourceRange _range;
     }
 
     public class MidAssignExp : MidExp
     {
         public MidAssignExp(
+            SourceRange range,
             MidVal dest,
-            MidVal src,
-            SourceRange range)
-            : base(new MidVoidType())
+            MidVal src )
+            : base(range, new MidVoidType())
         {
             _dest = dest;
             _src = src;
-            _range = range;
         }
 
         public MidVal Dest
@@ -325,17 +337,14 @@ namespace Spark.Mid
             set { _src = value; }
         }
 
-        public SourceRange Range { get { return _range; } }
-
         private MidVal _dest;
         private MidVal _src;
-        private SourceRange _range;
     }
 
     public class MidVoidExp : MidVal
     {
-        public MidVoidExp()
-            : base(new MidVoidType())
+        public MidVoidExp(SourceRange range)
+            : base(range, new MidVoidType())
         {
         }
     }
@@ -365,11 +374,10 @@ namespace Spark.Mid
             MidVal value,
             IEnumerable<MidCase> cases,
             SourceRange range)
-            : base(new MidVoidType())
+            : base(range, new MidVoidType())
         {
             _value = value;
             _cases = cases.ToArray();
-            _range = range;
         }
 
         public MidVal Value
@@ -382,11 +390,9 @@ namespace Spark.Mid
         {
             get { return _cases; }
         }
-        public SourceRange Range { get { return _range; } }
 
         private MidVal _value;
         private MidCase[] _cases;
-        private SourceRange _range;
     }
 
     public class MidIfExp : MidExp
@@ -396,12 +402,11 @@ namespace Spark.Mid
             MidExp thenExp,
             MidExp elseExp,
             SourceRange range)
-            : base(new MidDummyType())
+            : base(range, new MidDummyType())
         {
             this.Condition = condition;
             this.Then = thenExp;
             this.Else = elseExp;
-            _range = range;
         }
 
         public override MidType Type
@@ -412,20 +417,18 @@ namespace Spark.Mid
             }
         }
 
-        public SourceRange Range { get { return _range; } }
-
         public MidVal Condition { get; set; }
         public MidExp Then { get; set; }
         public MidExp Else { get; set; }
-        private SourceRange _range;
     }
 
     public class MidStructVal : MidVal
     {
         public MidStructVal(
+            SourceRange range,
             MidType type,
             IEnumerable<MidExp> fieldVals )
-            : base(type)
+            : base(range, type)
         {
             _fieldVals = fieldVals.ToArray();
         }

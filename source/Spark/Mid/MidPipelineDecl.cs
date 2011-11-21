@@ -138,7 +138,9 @@ namespace Spark.Mid
             throw new NotImplementedException();
         }
 
-        public MidExp App(IEnumerable<MidVal> args)
+        public MidExp App(
+            SourceRange range,
+            IEnumerable<MidVal> args)
         {
             throw new NotImplementedException();
         }
@@ -268,7 +270,9 @@ namespace Spark.Mid
             throw new NotImplementedException();
         }
 
-        public MidExp App(IEnumerable<MidVal> args)
+        public MidExp App(
+            SourceRange range,
+            IEnumerable<MidVal> args)
         {
             throw new NotImplementedException();
         }
@@ -282,9 +286,10 @@ namespace Spark.Mid
     public class MidConceptVal : MidVal
     {
         public MidConceptVal(
+            SourceRange range,
             MidConceptClassRef conceptClass,
             IEnumerable<IMidMemberRef> memberRefs)
-            : base(conceptClass)
+            : base(range, conceptClass)
         {
             _memberRefs = memberRefs.ToArray();
         }

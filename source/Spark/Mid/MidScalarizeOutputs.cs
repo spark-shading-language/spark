@@ -218,7 +218,7 @@ namespace Spark.Mid
                     return fetch;
 
                 var fieldExps = (from f in info.Fields
-                                 select _exps.AttributeFetch( fetch.Obj, f.AttrDecl )).ToArray();
+                                 select _exps.AttributeFetch(fetch.Range,  fetch.Obj, f.AttrDecl )).ToArray();
 
                 foreach( var f in info.Fields )
                 {
@@ -226,6 +226,7 @@ namespace Spark.Mid
                 }
 
                 return new MidStructVal(
+                    fetch.Range,
                     fetch.Type,
                     fieldExps );
             }
@@ -249,6 +250,7 @@ namespace Spark.Mid
                 fieldAttr.IsOutput = true;
 
                 return _exps.AttributeFetch(
+                    fieldRef.Range,
                     attrFetch.Obj,
                     fieldAttr);
             }
@@ -314,7 +316,8 @@ namespace Spark.Mid
             MidFieldDecl field)
         {
             var midExp = _exps.FieldRef(
-                    _exps.AttributeRef( attribute ),
+                    attribute.Range,
+                    _exps.AttributeRef( attribute.Range, attribute ),
                     field );
 
             var name = _identifiers.unique(

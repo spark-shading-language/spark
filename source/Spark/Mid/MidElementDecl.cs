@@ -141,9 +141,10 @@ namespace Spark.Mid
     public class MidElementCtorApp : MidExp
     {
         public MidElementCtorApp(
+            SourceRange range,
             MidElementDecl element,
             IEnumerable<MidElementCtorArg> args)
-            : base(new MidElementType(element))
+            : base(range, new MidElementType(element))
         {
             _element = element;
             _args = args.ToArray();

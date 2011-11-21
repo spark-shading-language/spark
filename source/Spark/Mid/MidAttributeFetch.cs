@@ -22,10 +22,11 @@ namespace Spark.Mid
     public class MidAttributeFetch : MidPath
     {
         public MidAttributeFetch(
+            SourceRange range,
             MidPath obj,
             MidAttributeDecl attribute,
             ILazyFactory lazyFactory )
-            : base(new MidDummyType())
+            : base(range, new MidDummyType())
         {
             _obj = obj;
             _type = lazyFactory.New(() => _attribute.Value.Type);
@@ -33,10 +34,11 @@ namespace Spark.Mid
         }
 
         public MidAttributeFetch(
+            SourceRange range,
             MidPath obj,
             MidType type,
             ILazy<MidAttributeDecl> attribute)
-            : base(new MidDummyType())
+            : base(range, new MidDummyType())
         {
             _obj = obj;
             _type = Lazy.Value(type);

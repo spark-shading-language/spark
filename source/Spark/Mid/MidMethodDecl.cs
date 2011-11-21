@@ -79,9 +79,11 @@ namespace Spark.Mid
             _exps = exps;
         }
 
-        public override MidExp App(IEnumerable<MidVal> args)
+        public override MidExp App(
+            SourceRange range,
+            IEnumerable<MidVal> args)
         {
-            return _exps.MethodApp( _decl, args );
+            return _exps.MethodApp( range, _decl, args );
         }
 
         private MidMethodDecl _decl;
@@ -147,9 +149,11 @@ namespace Spark.Mid
             _memberTerm = memberTerm;
         }
 
-        public override MidExp App(IEnumerable<MidVal> args)
+        public override MidExp App(
+            SourceRange range,
+            IEnumerable<MidVal> args)
         {
-            return new MidBuiltinApp(_decl, args);
+            return new MidBuiltinApp(range, _decl, args);
         }
 
         private MidBuiltinMethodDecl _decl;
@@ -159,9 +163,10 @@ namespace Spark.Mid
     public class MidBuiltinApp : MidExp
     {
         public MidBuiltinApp(
+            SourceRange range,
             MidBuiltinMethodDecl decl,
             IEnumerable<MidVal> args)
-            : base(decl.ResultType)
+            : base(range, decl.ResultType)
         {
             _decl = decl;
             _args = args.ToArray();

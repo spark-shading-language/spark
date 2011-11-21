@@ -72,9 +72,10 @@ namespace Spark.Mid
     public class MidFieldRef : MidPath
     {
         public MidFieldRef(
+            SourceRange range,
             MidPath obj,
             MidFieldDecl decl)
-            : base(decl.Type)
+            : base(range, decl.Type)
         {
             _obj = obj;
             _decl = decl;
