@@ -66,6 +66,7 @@ ID3D11DepthStencilState* mEqualStencilState;
 
 // DS
 bool gUseDeferred  = false;
+bool gUseSpotLight = false;
 std::vector< std::tr1::shared_ptr<Texture2D> > mGBuffer;
 // Handy cache of list of RT pointers for G-buffer
 std::vector<ID3D11RenderTargetView*> mGBufferRTV;
@@ -126,6 +127,7 @@ ID3D11Buffer*               g_pcbPSPerFrame = NULL;
 // SPARK:
 #define IDC_CHECKBOX_USE_SPARK  5
 #define IDC_CHECKBOX_DEFERRED   6
+#define IDC_CHECKBOX_SPOTLIGHT  7
 
 //--------------------------------------------------------------------------------------
 // Forward declarations 
@@ -258,6 +260,7 @@ void InitApp()
     // SPARK:
     g_HUD.AddCheckBox( IDC_CHECKBOX_USE_SPARK, L"Use Spar(K)", 0, iY += 26, 140, 24, gUseSpark, 'K' );
     g_HUD.AddCheckBox( IDC_CHECKBOX_DEFERRED, L"Use Deferred (D)", 0, iY += 26, 140, 24, gUseDeferred, 'D' );
+    g_HUD.AddCheckBox( IDC_CHECKBOX_SPOTLIGHT, L"Use Spotlight (D)", 0, iY += 26, 140, 24, gUseSpotLight, 'S' );
 
     g_SampleUI.SetCallback( OnGUIEvent ); iY = 10;
 
@@ -423,6 +426,10 @@ void CALLBACK OnGUIEvent( UINT nEvent, int nControlID, CDXUTControl* pControl, v
 
         case IDC_CHECKBOX_DEFERRED:
             gUseDeferred = ((CDXUTCheckBox*)pControl)->GetChecked();
+            break;
+
+        case IDC_CHECKBOX_SPOTLIGHT:
+            gUseSpotLight = ((CDXUTCheckBox*)pControl)->GetChecked();
             break;
     }
 
@@ -804,13 +811,16 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
 
         d3dDeviceContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
 
-        d3dDeviceContext->PSSetShader(gDirectionalLightPS, 0, 0);
-    //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
-//        d3dDeviceContext->Draw(3, 0);
+        if (!gUseSpotLight) {
+            d3dDeviceContext->PSSetShader(gDirectionalLightPS, 0, 0);
+        //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
+            d3dDeviceContext->Draw(3, 0);
+        } else {
+            d3dDeviceContext->PSSetShader(gSpotLightPS, 0, 0);
+        //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
+            d3dDeviceContext->Draw(3, 0);
+        }
 
-        d3dDeviceContext->PSSetShader(gSpotLightPS, 0, 0);
-    //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
-        d3dDeviceContext->Draw(3, 0);
         d3dDeviceContext->OMSetBlendState(NULL, 0, 0xFFFFFFFF);
         d3dDeviceContext->OMSetDepthStencilState(NULL, 0);
     }

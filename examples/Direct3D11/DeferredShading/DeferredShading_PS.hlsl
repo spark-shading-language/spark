@@ -262,5 +262,5 @@ float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
     float atten = pow(cosangle, 2.0f) / (d * d);
     atten *= smoothstep(cosoutside, cosinside, cosangle);
     const float intensity = 20000.0f;
-    return atten * intensity /**  vDiffuse * fLighting*/;
+    return atten * intensity *  vDiffuse * fLighting;
 }
