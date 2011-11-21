@@ -87,6 +87,20 @@ SurfaceData ComputeSurfaceDataFromGeometry(PS_INPUT input)
     return surface;
 }
 
+float4 ComputeSpotLighting(float4 vDiffuse, float3 positionView, float3 normalView)
+{
+    float d = distance(positionView, g_SpotLightPosView.xyz);
+    float3 lightDirView = normalize(g_SpotLightPosView.xyz - positionView);
+    float fLighting = saturate(dot(lightDirView, normalView));
+
+    float cosoutside = cos (g_SpotLightParams.x);
+    float cosinside = cos (g_SpotLightParams.x - D3DX_PI/36.0f);
+    float cosangle = saturate(dot(normalize(-g_SpotLightDir.xyz), lightDirView)) ;
+    float atten = pow(cosangle, 2.0f) / (d * d);
+    atten *= smoothstep(cosoutside, cosinside, cosangle);
+    const float intensity = 20000.0f;
+    return atten * intensity *  vDiffuse * fLighting;
+}
 
 //--------------------------------------------------------------------------------------
 // Pixel Shader
@@ -99,19 +113,8 @@ float4 PSMain( PS_INPUT Input ) : SV_TARGET
     fLighting = max( fLighting, g_fAmbient );
     if (gUseSpotLight == 0)
         return vDiffuse * fLighting;
-
-    float3 positionView = Input.vPositionView; 
-    float d = distance(positionView, g_SpotLightPosView.xyz);
-    float3 lightDirView = normalize(g_SpotLightPosView.xyz - positionView);
-    fLighting = saturate(dot(lightDirView, normalize(Input.vNormal)));
-    float cosoutside = cos (g_SpotLightParams.x);
-    float cosinside = cos (g_SpotLightParams.x - D3DX_PI/36.0f);
-    float cosangle = saturate(dot(normalize(-g_SpotLightDir.xyz), lightDirView)) ;
-    float atten = pow(cosangle, 2.0f) / (d * d);
-    atten *= smoothstep(cosoutside, cosinside, cosangle);
-    const float intensity = 20000.0f;
-    return atten * intensity *  vDiffuse * fLighting;
-
+    else
+        return ComputeSpotLighting(vDiffuse, Input.vPositionView, Input.vNormal);
 }
 
 //--------------------------------------------------------------------------------------
@@ -247,24 +250,10 @@ float4 DirectionalLightPS(FullScreenTriangleVSOut input) : SV_Target
 }
 
 
-//float4 ComputeSpotLighting(float4 vDiffuse, float3 positionView, float3 normalView)
-//{
-//}
+
 
 float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
 {
     SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), 0);
-    float4 vDiffuse = surface.albedo;
-        
-    float d = distance(surface.positionView, g_SpotLightPosView.xyz);
-    float3 lightDirView = normalize(g_SpotLightPosView.xyz - surface.positionView);
-    float fLighting = saturate(dot(lightDirView, surface.normal));
-
-    float cosoutside = cos (g_SpotLightParams.x);
-    float cosinside = cos (g_SpotLightParams.x - D3DX_PI/36.0f);
-    float cosangle = saturate(dot(normalize(-g_SpotLightDir.xyz), lightDirView)) ;
-    float atten = pow(cosangle, 2.0f) / (d * d);
-    atten *= smoothstep(cosoutside, cosinside, cosangle);
-    const float intensity = 20000.0f;
-    return atten * intensity *  vDiffuse * fLighting;
+    return ComputeSpotLighting(surface.albedo, surface.positionView, surface.normal);
 }

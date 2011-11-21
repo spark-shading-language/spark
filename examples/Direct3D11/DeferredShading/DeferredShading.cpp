@@ -266,7 +266,7 @@ void InitApp()
     // SPARK:
     g_HUD.AddCheckBox( IDC_CHECKBOX_USE_SPARK, L"Use Spar(K)", 0, iY += 26, 140, 24, gUseSpark, 'K' );
     g_HUD.AddCheckBox( IDC_CHECKBOX_DEFERRED, L"Use Deferred (D)", 0, iY += 26, 140, 24, gUseDeferred, 'D' );
-    g_HUD.AddCheckBox( IDC_CHECKBOX_SPOTLIGHT, L"Use Spotlight (D)", 0, iY += 26, 140, 24, gUseSpotLight, 'S' );
+    g_HUD.AddCheckBox( IDC_CHECKBOX_SPOTLIGHT, L"Use Spotlight (S)", 0, iY += 26, 140, 24, gUseSpotLight, 'S' );
 
     g_SampleUI.SetCallback( OnGUIEvent ); iY = 10;
 
@@ -561,6 +561,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     SAFE_RELEASE( pVertexShaderBuffer );
     SAFE_RELEASE( pForwardPSBuffer );
     SAFE_RELEASE( pGBufferPSBuffer);
+    SAFE_RELEASE ( pDirectionalLightPSBuffer );
     SAFE_RELEASE ( pSpotLightPSBuffer );
 
     // Load the mesh
