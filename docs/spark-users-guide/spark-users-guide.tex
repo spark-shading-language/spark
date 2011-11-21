@@ -746,7 +746,7 @@ If we always use the same vertex stream or sampler when rendering with this shad
 \chapter{Spark Language Guide}
 
 This chapter will provide a brief background on the concepts of the Spark language.
-More detailed reference information on language syntax and rules will be deferred to Chapter \ref{chap:langref}.
+More detailed reference information on language syntax and rules will be deferred to a later document.
 
 \section{Shader Classes}
 
@@ -903,12 +903,12 @@ abstract shader class SimpleAttribute extends D3D11DrawPass
 \end{spark}
 \end{codeblock}
 This attribute is named \code{nDotL}, and is of type \code{float4}.
-It also has a \emph{rate} of \code{@Fragment}, which says that this attribute will be evaluated once per fragment (you can try to read the \code{@} character as ``per-'').
+It also has a \emph{rate} of \code{@Fragment}, which says that this attribute will be evaluated once per fragment (you can usually read the \code{@} character as ``per-'').
 Finally, the attribute has a \emph{value} expression that defines how to compute this attribute.
 
 Like methods, attributes may be declared \kw{abstract} or \kw{virtual}, and a derived class can \kw{override} virtual or abstract attributes.
 In addition, an attribute can also be marked as \kw{input} or \kw{output}.
-We will discuss input attributes in more detail in Section \ref{sec:recordguide}, but in most cases these are used to mark shader parameters (\code{input @Uniform}) and outputs (\code{output @Pixel}).
+We will discuss input attributes in more detail in Section \ref{sec:recorddeclguide}, but in most cases these are used to mark shader parameters (\code{input @Uniform}) and outputs (\code{output @Pixel}).
 
 The value expression for an attribute may involve constants, calls to user- and system-defined methods, and references to other attributes.
 When an attribute definition refers to another attribute with a different rate, the compiler may insert \emph{plumbing} code, for example to interpolate a value from vertices to fragments:
@@ -1035,6 +1035,7 @@ Light aLight = Light( L: lightDir, N: normal );
 we use \code{key: value} parameter-passing syntax to specify a value for each of the \kw{input} attributes of the \code{Light} record.
 
 \section{Projection}
+\label{sec:projectionguide}
 
 Once we have an instance of the \code{Light} record type, we can get the value of one of its fields using an operation called \emph{projection}:
 \begin{codeblock}
@@ -1465,6 +1466,22 @@ Note that there is a discrepancy in this name of this stage: the \emph{Pixel} Sh
 \end{tabularx}
 \end{stdlibx}
 Attributes with the \code{@Fragment} rate can be used to compute color values, fetch textures, etc.
+
+Per-fragment computations may make use of a system-generated attribute for screen-space position:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{@Fragment float4 PS_ScreenSpacePosition;}      \desc{Equivalent to HLSL \code{SV\_Position} input}
+\end{tabularx}
+\end{stdlibx}
+
+If a shader wishes to cull some fragments, it can do so by writing the the \code{PS\_CullFragment} output:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\longdecl{virtual @Fragment bool PS_CullFragment = false;}      \desc{Similar to HLSL \kw{discard} operation}
+\end{tabularx}
+\end{stdlibx}
 
 \begin{note}
 Spark does not currently support shaders that write an explicit per-fragment depth.

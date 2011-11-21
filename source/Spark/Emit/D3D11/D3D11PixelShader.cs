@@ -803,6 +803,11 @@ namespace Spark.Emit.D3D11
                 fragmentElement,
                 GetAttribute(pixelElement, "__ps2om"));
 
+            var psCullFragmentAttr = GetAttribute(fragmentElement, "PS_CullFragment");
+            entryPointSpan.WriteLine("\tif( {0} ) discard;",
+                hlslContext.EmitAttribRef(psCullFragmentAttr, entryPointSpan));
+
+
             for (int ii = 0; ii < renderTargetCount; ++ii)
             {
                 var sourceInfo = _renderTargetSources[ii];
