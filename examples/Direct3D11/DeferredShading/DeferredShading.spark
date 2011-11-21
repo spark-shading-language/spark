@@ -69,6 +69,7 @@ abstract mixin shader class GenerateSurfaceAttributes
     // @CoarseVertex
     //
     @CoarseVertex float3 N_world = mul(N_model, float3x3(world));
+    @CoarseVertex float3 N_view = mul(N_model, float3x3(worldview));
 //    @CoarseVertex float3 viewVec = normalize(cameraPos - mul(float4(P_model, 1.0f), world).xyz);
     @CoarseVertex float3 P_view = mul(float4(P_model,1.0f), worldview).xyz;
 
@@ -77,7 +78,7 @@ abstract mixin shader class GenerateSurfaceAttributes
     override RS_Position = mul(float4(P_model, 1.0f), worldViewProj);
 
     override positionView = P_view;         // View space position
-    override normal = normalize(N_world);               // World space normal
+    override normal = normalize(N_view);               // View space normal
     override albedo = Sample(diffuseTexture, linearSampler, texCoord);
     override specularAmount = 0.9f;        // Treated as a multiplier on albedo
     override specularPower = 25.0f;
@@ -206,3 +207,17 @@ abstract mixin shader class FullScreenTriangle extends D3D11DrawPass
 
 shader class DirectionalLightGBuffer extends FullScreenTriangle, UnpackGBuffer, DirectionalLight
 {}
+
+abstract mixin shader class SpotLight
+    extends Base, SurfaceAttributes
+{
+
+    //@Fragment float4 color = float4(normal, 1.0f);
+    // @Pixel
+    //
+    @Fragment float4 diffuse  = albedo;
+    @Fragment float  lighting = max(saturate(dot(lightDir, normal)), ambient);
+    @Fragment float4 color    = diffuse * lighting ;
+
+    output @Pixel float4 myTarget = color;
+}

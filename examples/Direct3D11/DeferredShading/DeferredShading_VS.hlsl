@@ -46,7 +46,7 @@ VS_OUTPUT VSMain( VS_INPUT Input )
 	Output.vViewVector = normalize((g_vCameraPos.xyz - mul(Input.vPosition, g_mWorld).xyz));
 	Output.vPositionView = mul( Input.vPosition, g_mWorldView).xyz;
 	Output.vPosition = mul( Input.vPosition, g_mWorldViewProjection );
-	Output.vNormal = mul( Input.vNormal, (float3x3)g_mWorld );
+	Output.vNormal = mul( Input.vNormal, (float3x3)g_mWorldView );
 	Output.vTexcoord = Input.vTexcoord;
 	
 	return Output;
