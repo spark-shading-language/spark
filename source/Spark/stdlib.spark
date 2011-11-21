@@ -290,6 +290,7 @@ abstract shader class D3D11DrawPass
 
 	element Fragment;
     input @Fragment float4 PS_ScreenSpacePosition;
+    virtual output @Fragment bool PS_CullFragment = false;
 
 	element Pixel;
 	input @Pixel Fragment __ps2om;
