@@ -111,7 +111,13 @@ struct CB_PS_PER_FRAME
     D3DXVECTOR4 m_SpotLightPos;
     D3DXVECTOR4 m_SpotLightDir;
     D3DXVECTOR4 m_SpotLightParameters; // fov, aspect, near, far
+
+    UINT        useSpotLight;
+    UINT        padding1;
+    UINT        padding2;
+    UINT        padding3;
 };
+
 UINT                        g_iCBPSPerFrameBind = 1;
 
 ID3D11Buffer*               g_pcbVSPerObject = NULL;
@@ -746,6 +752,8 @@ static spark::float3 Convert( const D3DXVECTOR3& v )
 
 void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice );
 
+void SetSpotLigtParameters( D3DXVECTOR4 * vSpotLightPosView, D3DXVECTOR4 * vSpotLightDirView );
+
 void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device* pd3dDevice ) 
 {
     auto pDSV = DXUTGetD3D11DepthStencilView();
@@ -790,14 +798,10 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
             // Get the light direction
 
         D3D11_MAPPED_SUBRESOURCE MappedResource;
-        auto viewMat = *g_Camera.GetViewMatrix();
-        auto vDirWorld = D3DXVECTOR4(*g_SpotLight.GetLookAtPt() - *g_SpotLight.GetEyePt(), 0.0f);
-        auto vSpotLightPosWorld = D3DXVECTOR4(*g_SpotLight.GetEyePt(), 1.0f) ;
         D3DXVECTOR4 vSpotLightPosView;
-        D3DXVec4Transform(&vSpotLightPosView, &vSpotLightPosWorld, &viewMat);
         D3DXVECTOR4 vSpotLightDirView;
-        D3DXVec4Transform(&vSpotLightDirView, &vDirWorld, &viewMat);
-        
+        SetSpotLigtParameters(&vSpotLightPosView, &vSpotLightDirView);
+
 
         d3dDeviceContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource );
         CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
@@ -807,6 +811,7 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
         pPerFrame->m_SpotLightDir = vSpotLightDirView;
         pPerFrame->m_SpotLightPos = vSpotLightPosView;
         pPerFrame->m_SpotLightParameters = D3DXVECTOR4(g_SpotLightFOV, g_SpotLightAspect, g_SpotLight.GetNearClip(), g_SpotLight.GetFarClip());
+        pPerFrame->useSpotLight = gUseSpotLight;
         d3dDeviceContext->Unmap( g_pcbPSPerFrame, 0 );
 
         d3dDeviceContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
@@ -931,9 +936,23 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
 
     // Per frame cb update
     D3D11_MAPPED_SUBRESOURCE MappedResource;
+    D3DXVECTOR4 vSpotLightPosView;
+    D3DXVECTOR4 vSpotLightDirView;
+    SetSpotLigtParameters(&vSpotLightPosView, &vSpotLightDirView);
+
+
     V( pd3dImmediateContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
     CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
     pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
+
+    D3DXMatrixTranspose( &pPerFrame->m_CameraProj, g_Camera.GetProjMatrix() );
+
+    pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
+    pPerFrame->m_SpotLightDir = vSpotLightDirView;
+    pPerFrame->m_SpotLightPos = vSpotLightPosView;
+    pPerFrame->m_SpotLightParameters = D3DXVECTOR4(g_SpotLightFOV, g_SpotLightAspect, g_SpotLight.GetNearClip(), g_SpotLight.GetFarClip());
+    pPerFrame->useSpotLight = gUseSpotLight;
+
     pd3dImmediateContext->Unmap( g_pcbPSPerFrame, 0 );
 
     pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
@@ -1109,6 +1128,15 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
         // SPARK:
         RenderSceneSpark(pRTV, pDSV, mWorld, mView, mProj, vLightDir, fAmbient, vCameraPos, pd3dDevice, pd3dImmediateContext, sparkShader);
     }
+}
+
+void SetSpotLigtParameters( D3DXVECTOR4 * vSpotLightPosView, D3DXVECTOR4 * vSpotLightDirView )
+{
+    auto viewMat = *g_Camera.GetViewMatrix();
+    auto vDirWorld = D3DXVECTOR4(*g_SpotLight.GetLookAtPt() - *g_SpotLight.GetEyePt(), 0.0f);
+    auto vSpotLightPosWorld = D3DXVECTOR4(*g_SpotLight.GetEyePt(), 1.0f) ;
+    D3DXVec4Transform(vSpotLightPosView, &vSpotLightPosWorld, &viewMat);
+    D3DXVec4Transform(vSpotLightDirView, &vDirWorld, &viewMat);
 }
 
 

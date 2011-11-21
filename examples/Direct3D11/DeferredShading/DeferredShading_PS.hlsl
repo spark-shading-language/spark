@@ -6,6 +6,10 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 //--------------------------------------------------------------------------------------
 
+// Constants 
+
+#define D3DX_PI    3.141592654f
+
 //--------------------------------------------------------------------------------------
 // Globals
 //--------------------------------------------------------------------------------------
@@ -23,6 +27,11 @@ cbuffer cbPerFrame : register( b1 )
     float4      g_SpotLightPosView      : packoffset( c5 );
     float4      g_SpotLightDir          : packoffset( c6 );
     float4      g_SpotLightParams       : packoffset( c7 );
+
+    uint        gUseSpotLight           : packoffset( c8 );
+//    uint        padding1;
+//    uint        padding2;
+//    uint        padding3;
 };
 
 //--------------------------------------------------------------------------------------
@@ -78,37 +87,31 @@ SurfaceData ComputeSurfaceDataFromGeometry(PS_INPUT input)
     return surface;
 }
 
+
 //--------------------------------------------------------------------------------------
 // Pixel Shader
 //--------------------------------------------------------------------------------------
 float4 PSMain( PS_INPUT Input ) : SV_TARGET
 {
+    float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
+    
+    float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
+    fLighting = max( fLighting, g_fAmbient );
+    if (gUseSpotLight == 0)
+        return vDiffuse * fLighting;
 
-//    SurfaceData surface = ComputeSurfaceDataFromGeometry( Input );
-//    float3 d = 0.01f * surface.positionView;
-//    return float4(d, 1.0f);
+    float3 positionView = Input.vPositionView; 
+    float d = distance(positionView, g_SpotLightPosView.xyz);
+    float3 lightDirView = normalize(g_SpotLightPosView.xyz - positionView);
+    fLighting = saturate(dot(lightDirView, normalize(Input.vNormal)));
+    float cosoutside = cos (g_SpotLightParams.x);
+    float cosinside = cos (g_SpotLightParams.x - D3DX_PI/36.0f);
+    float cosangle = saturate(dot(normalize(-g_SpotLightDir.xyz), lightDirView)) ;
+    float atten = pow(cosangle, 2.0f) / (d * d);
+    atten *= smoothstep(cosoutside, cosinside, cosangle);
+    const float intensity = 20000.0f;
+    return atten * intensity *  vDiffuse * fLighting;
 
-	float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
-	
-	float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
-	fLighting = max( fLighting, g_fAmbient );
-	return vDiffuse * fLighting;
-
-//    float3 vView = normalize(Input.vViewVector);
-//    float3 vNormal = normalize(Input.vNormal);
-//    float3 vLightDir = normalize(g_vLightDir);
-//
-//    //  Specular lighting.
-//    float fNormalDotLight = saturate ( dot(vNormal, vLightDir) );  
-//    float3 vLightReflect = 2.0 * fNormalDotLight * vNormal - vLightDir;
-//    float fViewDotReflect = saturate( dot(vView, vLightReflect) );
-//    float fSpecIntensity1 = pow(fViewDotReflect, 2.0f);
-//    float4 fSpecIntensity = (float4)fSpecIntensity1;
-//
-//    float4 colSpecular = float4(1.0f, 1.0f, 1.0f, 1.0f);
-//    float4 lightSpecular = 0.1 * float4(1.0f, 1.0f, 1.0f, 1.0f);
-//    float4 specular = fSpecIntensity * colSpecular * lightSpecular;
-//	return specular;
 }
 
 //--------------------------------------------------------------------------------------
@@ -244,7 +247,9 @@ float4 DirectionalLightPS(FullScreenTriangleVSOut input) : SV_Target
 }
 
 
-#define D3DX_PI    3.141592654f
+//float4 ComputeSpotLighting(float4 vDiffuse, float3 positionView, float3 normalView)
+//{
+//}
 
 float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
 {
@@ -254,7 +259,6 @@ float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
     float d = distance(surface.positionView, g_SpotLightPosView.xyz);
     float3 lightDirView = normalize(g_SpotLightPosView.xyz - surface.positionView);
     float fLighting = saturate(dot(lightDirView, surface.normal));
-//    return vDiffuse * fLighting;
 
     float cosoutside = cos (g_SpotLightParams.x);
     float cosinside = cos (g_SpotLightParams.x - D3DX_PI/36.0f);
