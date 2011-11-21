@@ -22,6 +22,10 @@ using Spark.Mid;
 
 namespace Spark.Emit.D3D11
 {
+    public class D3D11PixelShaderOperationTooComplex : Exception
+    {
+    }
+
     public class D3D11PixelShader : D3D11Stage
     {
         public override void EmitInterface()
@@ -98,6 +102,16 @@ namespace Spark.Emit.D3D11
 
         abstract class AttrInfo
         {
+            private SourceRange _range;
+
+            public AttrInfo(
+                SourceRange range)
+            {
+                _range = range;
+            }
+
+            public SourceRange Range { get { return _range; } }
+
             public virtual bool IsFactor(
                 TermFlavor flavor,
                 AttrCase channel)
@@ -108,6 +122,12 @@ namespace Spark.Emit.D3D11
 
         class SrcInfo : AttrInfo
         {
+            public SrcInfo(
+                SourceRange range)
+                : base(range)
+            {
+            }
+
             public override bool IsFactor(
                 TermFlavor flavor,
                 AttrCase channel)
@@ -120,6 +140,12 @@ namespace Spark.Emit.D3D11
 
         class DestInfo : AttrInfo
         {
+            public DestInfo(
+                SourceRange range)
+                : base(range)
+            {
+            }
+
             public override bool IsFactor(
                 TermFlavor flavor,
                 AttrCase channel)
@@ -133,15 +159,19 @@ namespace Spark.Emit.D3D11
         class FactorInfo : AttrInfo
         {
             public FactorInfo(
+                SourceRange range,
                 D3D11_BLEND color,
                 D3D11_BLEND alpha)
+                : base(range)
             {
                 _color = color;
                 _alpha = alpha;
             }
 
             public FactorInfo(
+                SourceRange range,
                 D3D11_BLEND opnd)
+                : base(range)
             {
                 _color = opnd;
                 _alpha = opnd;
@@ -175,8 +205,10 @@ namespace Spark.Emit.D3D11
         class TermInfo : AttrInfo
         {
             public TermInfo(
+                SourceRange range,
                 AttrInfo left,
                 AttrInfo right )
+                : base(range)
             {
                 _left = left;
                 _right = right;
@@ -189,9 +221,11 @@ namespace Spark.Emit.D3D11
         class OpInfo : AttrInfo
         {
             public OpInfo(
+                SourceRange range,
                 D3D11_BLEND_OP op,
                 AttrInfo left,
                 AttrInfo right)
+                : base(range)
             {
                 _op = op;
                 _left = left;
@@ -206,8 +240,10 @@ namespace Spark.Emit.D3D11
         class SubInfo : AttrInfo
         {
             public SubInfo(
+                SourceRange range,
                 AttrInfo left,
                 AttrInfo right)
+                : base(range)
             {
                 _left = left;
                 _right = right;
@@ -220,7 +256,9 @@ namespace Spark.Emit.D3D11
         class LitInfo : AttrInfo
         {
             public LitInfo(
+                SourceRange range,
                 float value)
+                : base(range)
             {
                 _value = value;
             }
@@ -263,12 +301,22 @@ namespace Spark.Emit.D3D11
 
             AttrInfo info = DecomposeAttr(midAttrDecl, context);
 
-            _renderTargetBlendDescs[index] = GetTargetBlendDesc(info);
+            try
+            {
+                var blendDesc = GetTargetBlendDesc(info);
+                _renderTargetBlendDescs[index] = blendDesc;
 
-            // Do validation stuff - basically, we need to
-            // be sure that whatever expressions get put into
-            // the _renderTargetSources[index] entry are more
-            // or less the "same" source...
+
+                // Do validation stuff - basically, we need to
+                // be sure that whatever expressions get put into
+                // the _renderTargetSources[index] entry are more
+                // or less the "same" source...
+            }
+            catch (D3D11PixelShaderOperationTooComplex)
+            {
+                // error should have been reported when
+                // the exception was thrown
+            }
         }
 
         private AttrInfo DecomposeAttr(
@@ -286,6 +334,13 @@ namespace Spark.Emit.D3D11
         }
 
         private AttrInfo DecomposeAttrImpl(
+            MidExp exp,
+            DecomposeAttrContext context)
+        {
+            throw OperationTooComplexError(exp.Range);
+        }
+
+        private AttrInfo DecomposeAttrImpl(
             MidAttributeRef midAttrRef,
             DecomposeAttrContext context)
         {
@@ -296,7 +351,7 @@ namespace Spark.Emit.D3D11
             MidLit<Int32> exp,
             DecomposeAttrContext context)
         {
-            return new LitInfo((float) exp.Value);
+            return new LitInfo(exp.Range, (float) exp.Value);
         }
 
         private void SetSource(
@@ -319,7 +374,7 @@ namespace Spark.Emit.D3D11
                 }
             }
 
-            srcExp = new MidAttributeRef(attr, new LazyFactory());
+            srcExp = new MidAttributeRef(attr.Range, attr, new LazyFactory());
         }
 
         private AttrInfo DecomposeAttrImpl(
@@ -339,13 +394,13 @@ namespace Spark.Emit.D3D11
                 {
                 case AttrCase.Color:
                     SetSource(ref _renderTargetSources[context.index].colorExp, srcAttr);
-                    return new SrcInfo();
+                    return new SrcInfo(exp.Range);
                 case AttrCase.Alpha:
                     SetSource(ref _renderTargetSources[context.index].alphaExp, srcAttr);
-                    return new FactorInfo(D3D11_BLEND.D3D11_BLEND_SRC_ALPHA);
+                    return new FactorInfo(exp.Range, D3D11_BLEND.D3D11_BLEND_SRC_ALPHA);
                 case AttrCase.Combined:
                     SetSource(ref _renderTargetSources[context.index].combinedExp, srcAttr);
-                    return new SrcInfo();
+                    return new SrcInfo(exp.Range);
                 default:
                     throw new NotImplementedException();
                 }
@@ -355,11 +410,12 @@ namespace Spark.Emit.D3D11
                 switch (context.flavor)
                 {
                 case AttrCase.Color:
-                    return new FactorInfo(D3D11_BLEND.D3D11_BLEND_DEST_COLOR);
+                        return new FactorInfo(exp.Range, D3D11_BLEND.D3D11_BLEND_DEST_COLOR);
                 case AttrCase.Alpha:
-                    return new FactorInfo(D3D11_BLEND.D3D11_BLEND_DEST_ALPHA);
+                        return new FactorInfo(exp.Range, D3D11_BLEND.D3D11_BLEND_DEST_ALPHA);
                 case AttrCase.Combined:
                     return new FactorInfo(
+                        exp.Range,
                         D3D11_BLEND.D3D11_BLEND_DEST_COLOR,
                         D3D11_BLEND.D3D11_BLEND_DEST_ALPHA);
                 default:
@@ -391,6 +447,7 @@ namespace Spark.Emit.D3D11
                     var left = DecomposeAttr(args[0], context);
                     var right = DecomposeAttr(args[1], context);
                     return new OpInfo(
+                        app.Range,
                         D3D11_BLEND_OP.D3D11_BLEND_OP_ADD,
                         left,
                         right);
@@ -399,17 +456,17 @@ namespace Spark.Emit.D3D11
             case "MulFloat4": {
                 var left = DecomposeAttr(args[0], context);
                 var right = DecomposeAttr(args[1], context);
-                return new TermInfo(left, right);
+                return new TermInfo(app.Range, left, right);
                 }
             case "MulFloat_Float4": {
                 var left = DecomposeAttr(args[0], context.SwitchToAlpha());
                 var right = DecomposeAttr(args[1], context);
-                return new TermInfo(left, right);
+                return new TermInfo(app.Range, left, right);
                 }
             case "MulFloat4_Float": {
                 var left = DecomposeAttr(args[0], context);
                 var right = DecomposeAttr(args[1], context.SwitchToAlpha());
-                return new TermInfo(left, right);
+                return new TermInfo(app.Range, left, right);
                 }
             case "GetAlpha": {
                 var arg = DecomposeAttr(args[0], context.SwitchToAlpha());
@@ -420,7 +477,7 @@ namespace Spark.Emit.D3D11
                 {
                     var left = DecomposeAttr(args[0], context);
                     var right = DecomposeAttr(args[1], context);
-                    return new SubInfo( left, right );
+                    return new SubInfo(app.Range, left, right);
                 }
 
             case "IntToFloat":
@@ -435,9 +492,29 @@ namespace Spark.Emit.D3D11
 
         //
 
+        D3D11PixelShaderOperationTooComplex OperationTooComplexError(SourceRange range)
+        {
+            Diagnostics.Add(
+                Severity.Error,
+                range,
+                "Operation is too complex for the D3D11 Output Merger (OM) stage");
+            Diagnostics.Add(
+                Severity.Info,
+                range,
+                "Non-blending operations should be performed at the @Fragment rate");
+
+            return new D3D11PixelShaderOperationTooComplex();
+        }
+
         TargetBlendDesc GetTargetBlendDesc(AttrInfo info)
         {
             return GetTargetBlendDescImpl((dynamic)info);
+        }
+
+        TargetBlendDesc GetTargetBlendDescImpl(AttrInfo info)
+        {
+            throw OperationTooComplexError(info.Range);
+
         }
 
         TargetBlendDesc GetTargetBlendDescImpl(SrcInfo info)
@@ -469,6 +546,13 @@ namespace Spark.Emit.D3D11
             AttrCase channel)
         {
             return GetChannelBlendDescImpl((dynamic)info, channel);
+        }
+
+        ChannelBlendDesc GetChannelBlendDescImpl(
+            AttrInfo info,
+            AttrCase channel)
+        {
+            throw OperationTooComplexError(info.Range);
         }
 
         enum TermFlavor
@@ -578,6 +662,13 @@ namespace Spark.Emit.D3D11
             AttrCase channel )
         {
             return GetFactorBlendDescImpl((dynamic)info, channel);
+        }
+
+        D3D11_BLEND GetFactorBlendDescImpl(
+            AttrInfo info,
+            AttrCase channel)
+        {
+            throw OperationTooComplexError(info.Range);
         }
 
         D3D11_BLEND GetFactorBlendDescImpl(
