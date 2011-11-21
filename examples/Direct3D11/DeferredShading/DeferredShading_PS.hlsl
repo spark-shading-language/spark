@@ -111,10 +111,15 @@ float4 PSMain( PS_INPUT Input ) : SV_TARGET
     
     float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
     fLighting = max( fLighting, g_fAmbient );
-    if (gUseSpotLight == 0)
-        return vDiffuse * fLighting;
-    else
-        return ComputeSpotLighting(vDiffuse, Input.vPositionView, Input.vNormal);
+    return vDiffuse * fLighting;
+}
+
+float4 PSMainSpotLight( PS_INPUT Input ) : SV_TARGET
+{
+    float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
+//    float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
+//    fLighting = max( fLighting, g_fAmbient );
+    return ComputeSpotLighting(vDiffuse, Input.vPositionView, Input.vNormal);
 }
 
 //--------------------------------------------------------------------------------------

@@ -174,19 +174,21 @@ xcopy "$(ProjectDir)\..\..\..\bin\$(PlatformShortName)\$(Configuration)\SparkCPP
     <CustomBuild Include="DeferredShading_PS.hlsl">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">fxc /T ps_5_0 /E PSMain /Fo "%(RootDir)%(Directory)DeferredShading_PSMain.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
+fxc /T ps_5_0 /E PSMainSpotLight /Fo "%(RootDir)%(Directory)PSMainSpotLight.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
 fxc /T ps_5_0 /E GBufferPS /Fo "%(RootDir)%(Directory)DeferredShading_GBufferPS.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
 fxc /T ps_5_0 /E DirectionalLightPS /Fo "%(RootDir)%(Directory)DeferredShading_LightPS.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
 fxc /T ps_5_0 /E SpotLightPS /Fo "%(RootDir)%(Directory)DeferredShading_LightPS.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
 fxc /T vs_5_0 /E FullScreenTriangleVS /Fo "%(RootDir)%(Directory)DeferredShading_FullScreenTriangleVS.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
 </Command>
       <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">fxc /T ps_5_0 /E PSMain /Fo "%(RootDir)%(Directory)DeferredShading_PSMain.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
+fxc /T ps_5_0 /E PSMainSpotLight /Fo "%(RootDir)%(Directory)PSMainSpotLight.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
 fxc /T ps_5_0 /E GBufferPS /Fo "%(RootDir)%(Directory)DeferredShading_GBufferPS.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
 fxc /T ps_5_0 /E DirectionalLightPS /Fo "%(RootDir)%(Directory)DeferredShading_LightPS.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
 fxc /T ps_5_0 /E SpotLightPS /Fo "%(RootDir)%(Directory)DeferredShading_LightPS.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
 fxc /T vs_5_0 /E FullScreenTriangleVS /Fo "%(RootDir)%(Directory)DeferredShading_FullScreenTriangleVS.fxo"  /Ges /Zpr  "%(RootDir)%(Directory)%(Filename)%(Extension)"
 </Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">%(RootDir)%(Directory)DeferredShading_PSMain.fxo;%(RootDir)%(Directory)DeferredShading_GBufferPS.fxo;%(RootDir)%(Directory)DeferredShading_FullScreenTriangleVS.fxo;%(RootDir)%(Directory)DeferredShading_LightPS.fxo</Outputs>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">%(RootDir)%(Directory)DeferredShading_PSMain.fxo;%(RootDir)%(Directory)DeferredShading_GBufferPS.fxo;%(RootDir)%(Directory)DeferredShading_FullScreenTriangleVS.fxo;%(RootDir)%(Directory)DeferredShading_LightPS.fxo</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">%(RootDir)%(Directory)DeferredShading_PSMain.fxo;%(RootDir)%(Directory)PSMainSpotLight.fxo;%(RootDir)%(Directory)DeferredShading_GBufferPS.fxo;%(RootDir)%(Directory)DeferredShading_FullScreenTriangleVS.fxo;%(RootDir)%(Directory)DeferredShading_LightPS.fxo</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">%(RootDir)%(Directory)DeferredShading_PSMain.fxo;%(RootDir)%(Directory)PSMainSpotLight.fxo;%(RootDir)%(Directory)DeferredShading_GBufferPS.fxo;%(RootDir)%(Directory)DeferredShading_FullScreenTriangleVS.fxo;%(RootDir)%(Directory)DeferredShading_LightPS.fxo</Outputs>
     </CustomBuild>
     <CustomBuild Include="DeferredShading_VS.hlsl">
       <FileType>Document</FileType>
