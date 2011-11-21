@@ -629,7 +629,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     g_Camera.SetRadius( fObjectRadius * 3.0f, fObjectRadius * 0.5f, fObjectRadius * 10.0f );
 
     // Setup the spotlight's view parameters
-    D3DXVECTOR3 vecSpotLight( 0.0f, 1.5* fObjectRadius, 0.0f );
+    D3DXVECTOR3 vecSpotLight( 0.0f, 1.2 * fObjectRadius, 0.0f );
     D3DXVECTOR3 vecSpotLightLookAt ( 0.0f, 0.0f, 0.0f );
     g_SpotLight.SetViewParams( &vecSpotLight, &vecSpotLightLookAt );
     // May change this later
@@ -817,11 +817,10 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
 
         d3dDeviceContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
 
-        if (!gUseSpotLight) {
-            d3dDeviceContext->PSSetShader(gDirectionalLightPS, 0, 0);
-        //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
-            d3dDeviceContext->Draw(3, 0);
-        } else {
+        d3dDeviceContext->PSSetShader(gDirectionalLightPS, 0, 0);
+    //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
+        d3dDeviceContext->Draw(3, 0);
+        if (gUseSpotLight) {
             d3dDeviceContext->PSSetShader(gSpotLightPS, 0, 0);
         //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
             d3dDeviceContext->Draw(3, 0);
