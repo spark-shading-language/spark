@@ -30,7 +30,7 @@
 CDXUTDialogResourceManager  g_DialogResourceManager; // manager for shared resources of dialogs
 CModelViewerCamera          g_Camera;               // A model viewing camera
 CDXUTDirectionWidget        g_LightControl;
-float                       g_SpotLightFOV = D3DX_PI / 16;
+float                       g_SpotLightFOV = D3DX_PI / 12.0f;
 float                       g_SpotLightAspect = 0;
 CModelViewerCamera          g_SpotLight;               // A model viewing camera
 
@@ -784,18 +784,20 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
 
         D3D11_MAPPED_SUBRESOURCE MappedResource;
         auto viewMat = *g_Camera.GetViewMatrix();
-        auto vDir = *g_SpotLight.GetLookAtPt() - *g_SpotLight.GetEyePt();
+        auto vDirWorld = D3DXVECTOR4(*g_SpotLight.GetLookAtPt() - *g_SpotLight.GetEyePt(), 0.0f);
         auto vSpotLightPosWorld = D3DXVECTOR4(*g_SpotLight.GetEyePt(), 1.0f) ;
         D3DXVECTOR4 vSpotLightPosView;
         D3DXVec4Transform(&vSpotLightPosView, &vSpotLightPosWorld, &viewMat);
+        D3DXVECTOR4 vSpotLightDirView;
+        D3DXVec4Transform(&vSpotLightDirView, &vDirWorld, &viewMat);
+        
 
         d3dDeviceContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource );
         CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
-//        pPerFrame->m_CameraProj = *g_Camera.GetProjMatrix();
         D3DXMatrixTranspose( &pPerFrame->m_CameraProj, g_Camera.GetProjMatrix() );
 
         pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
-        pPerFrame->m_SpotLightDir = D3DXVECTOR4(vDir.x, vDir.y, vDir.z, 0.0f);
+        pPerFrame->m_SpotLightDir = vSpotLightDirView;
         pPerFrame->m_SpotLightPos = vSpotLightPosView;
         pPerFrame->m_SpotLightParameters = D3DXVECTOR4(g_SpotLightFOV, g_SpotLightAspect, g_SpotLight.GetNearClip(), g_SpotLight.GetFarClip());
         d3dDeviceContext->Unmap( g_pcbPSPerFrame, 0 );
@@ -804,7 +806,7 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
 
         d3dDeviceContext->PSSetShader(gDirectionalLightPS, 0, 0);
     //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
-        d3dDeviceContext->Draw(3, 0);
+//        d3dDeviceContext->Draw(3, 0);
 
         d3dDeviceContext->PSSetShader(gSpotLightPS, 0, 0);
     //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
