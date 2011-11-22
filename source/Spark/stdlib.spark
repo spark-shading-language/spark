@@ -563,6 +563,23 @@ abstract shader class D3D11DrawPass
 */
 
 //--------------------------------------------------------------------------------------
+// type DepthStencilState
+//--------------------------------------------------------------------------------------
+
+    [[Builtin("hlsl", "DepthStencilState")]]
+    [[Builtin("c++", "ID3D11DepthStencilState*")]]
+    [[Builtin("llvm", "v*")]]
+    type DepthStencilState;
+
+    [[Builtin("c++", "((ID3D11DepthStencilState*) NULL)")]]
+    [[Builtin("llvm", "__NULL")]]
+    @Constant DepthStencilState __NullDepthStencilState();
+
+    virtual output @Uniform DepthStencilState OM_DepthStencilState = __NullDepthStencilState();
+
+    virtual output @Uniform uint OM_StencilRef = uint(0xffffffff);
+
+//--------------------------------------------------------------------------------------
 // type RasterizerState
 //--------------------------------------------------------------------------------------
 
@@ -570,6 +587,10 @@ abstract shader class D3D11DrawPass
     [[Builtin("c++", "ID3D11RasterizerState*")]]
     [[Builtin("llvm", "v*")]]
     type RasterizerState;
+
+    [[Builtin("c++", "((ID3D11RasterizerState*) NULL)")]]
+    [[Builtin("llvm", "__NULL")]]
+    @Constant RasterizerState __NullRasterizerState();
 
     [[Builtin("c++", "spark::d3d11::CreateRasterizerState(device, {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})")]]
     [[Builtin("llvm", "FooBarBaz!")]]
@@ -600,6 +621,12 @@ abstract shader class D3D11DrawPass
             multisampleEnable:      false,
             antialiasedLineEnable:  false );
     }
+
+    virtual output @Uniform RasterizerState RS_State = __NullRasterizerState();
+
+    // \todo: scissor rects
+    // \todo: viewports
+
 
     //
 

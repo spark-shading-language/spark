@@ -665,6 +665,10 @@ namespace Spark
                     for each( IEmitVal^ a in args )
                         return a;
                 }
+                else if( format == "__NULL" )
+                {
+                    return Target->GetNullPointer( type );
+                }
                 else// if( format == "spark::d3d11::DrawIndexed16" )
                 {
                     auto llvmBuiltin = _method->Module->GetBuiltinFunction(format, type, args);
@@ -1496,6 +1500,8 @@ namespace Spark
                 AddCOM("ID3D11DeviceContext", "IASetInputLayout", 17, COMFunctionType("void", gcnew array<String^> {"v*",}));
                 AddCOM("ID3D11DeviceContext", "IASetVertexBuffers", 18, COMFunctionType("void", gcnew array<String^> {"u32","u32","v*","v*","v*",}));
                 AddCOM("ID3D11DeviceContext", "IASetPrimitiveTopology", 24, COMFunctionType("void", gcnew array<String^> {"u32",}));
+                AddCOM("ID3D11DeviceContext", "RSSetState", 43, COMFunctionType("void", gcnew array<String^> {"v*",}));
+                AddCOM("ID3D11DeviceContext", "OMSetDepthStencilState", 36, COMFunctionType("void", gcnew array<String^> {"v*","u32",}));
             }
 
             IEmitType^ LlvmEmitTarget::VoidType::get()
