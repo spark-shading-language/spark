@@ -365,12 +365,12 @@ namespace Spark.Emit.D3D11
                     var srcAttr = ((MidAttributeRef)srcExp).Decl;
                     if (srcAttr != attr)
                     {
-                        throw new NotImplementedException();
+                        throw OperationTooComplexError(srcExp.Range);
                     }
                 }
                 else
                 {
-                    throw new NotImplementedException();
+                    throw OperationTooComplexError(srcExp.Range);
                 }
             }
 
@@ -402,7 +402,7 @@ namespace Spark.Emit.D3D11
                     SetSource(ref _renderTargetSources[context.index].combinedExp, srcAttr);
                     return new SrcInfo(exp.Range);
                 default:
-                    throw new NotImplementedException();
+                    throw OperationTooComplexError(exp.Range);
                 }
             }
             else if (obj == "OM_Dest")
@@ -419,12 +419,12 @@ namespace Spark.Emit.D3D11
                         D3D11_BLEND.D3D11_BLEND_DEST_COLOR,
                         D3D11_BLEND.D3D11_BLEND_DEST_ALPHA);
                 default:
-                    throw new NotImplementedException();
+                    throw OperationTooComplexError(exp.Range);
                 }
             }
             else
             {
-                throw new NotImplementedException();
+                throw OperationTooComplexError(exp.Range);
             }
 
         }
@@ -436,7 +436,7 @@ namespace Spark.Emit.D3D11
             string template = app.Decl.GetTemplate("blend");
             if (template == null)
             {
-                throw new NotImplementedException();
+                throw OperationTooComplexError(app.Range);
             }
 
             var args = app.Args.ToArray();
@@ -486,7 +486,7 @@ namespace Spark.Emit.D3D11
                     return arg;
                 }
             default:
-                throw new NotImplementedException();
+                throw OperationTooComplexError(app.Range);
             }
         }
 
@@ -585,7 +585,7 @@ namespace Spark.Emit.D3D11
             }
             else
             {
-                throw new NotImplementedException();
+                throw OperationTooComplexError(info.Range);
             }
             result.op = info._op;
             return result;
@@ -630,6 +630,19 @@ namespace Spark.Emit.D3D11
         }
 
         D3D11_BLEND GetTermBlendDescImpl(
+            AttrInfo info,
+            AttrCase channel,
+            TermFlavor flavor)
+        {
+            if (info.IsFactor(flavor, channel))
+            {
+                return D3D11_BLEND.D3D11_BLEND_ONE;
+            }
+
+            throw OperationTooComplexError(info.Range);
+        }
+
+        D3D11_BLEND GetTermBlendDescImpl(
             TermInfo info,
             AttrCase channel,
             TermFlavor flavor)
@@ -649,7 +662,7 @@ namespace Spark.Emit.D3D11
             }
             else
             {
-                throw new NotImplementedException();
+                throw OperationTooComplexError(info.Range);
             }
 
             return GetFactorBlendDesc(
@@ -672,6 +685,20 @@ namespace Spark.Emit.D3D11
         }
 
         D3D11_BLEND GetFactorBlendDescImpl(
+            SrcInfo info,
+            AttrCase channel)
+        {
+            return D3D11_BLEND.D3D11_BLEND_ONE;
+        }
+
+        D3D11_BLEND GetFactorBlendDescImpl(
+            DestInfo info,
+            AttrCase channel)
+        {
+            return D3D11_BLEND.D3D11_BLEND_ONE;
+        }
+
+        D3D11_BLEND GetFactorBlendDescImpl(
             FactorInfo info,
             AttrCase channel)
         {
@@ -682,7 +709,7 @@ namespace Spark.Emit.D3D11
                 case AttrCase.Alpha:
                     return info._alpha;
                 default:
-                    throw new NotImplementedException();
+                    throw OperationTooComplexError(info.Range);
             }
         }
 
@@ -704,7 +731,7 @@ namespace Spark.Emit.D3D11
             var value = left._value;
             if (value != 1.0f)
             {
-                throw new NotImplementedException();
+                throw OperationTooComplexError(right.Range);
             }
 
             var factor = GetFactorBlendDesc(right, channel);
@@ -725,7 +752,7 @@ namespace Spark.Emit.D3D11
             case D3D11_BLEND.D3D11_BLEND_SRC1_ALPHA:
                     return D3D11_BLEND.D3D11_BLEND_INV_SRC1_ALPHA;
             default:
-                throw new NotImplementedException();
+                    throw OperationTooComplexError(right.Range);
             }
         }
 
@@ -734,7 +761,7 @@ namespace Spark.Emit.D3D11
             AttrInfo right,
             AttrCase channel)
         {
-            throw new NotImplementedException();
+            throw OperationTooComplexError(right.Range);
         }
 
         //
