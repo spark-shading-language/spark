@@ -70,6 +70,7 @@ ID3D11DepthStencilState* mLessThanStencilState;
 // DS
 bool gUseDeferred  = false;
 bool gUseSpotLight = false;
+bool gShadow = false;
 std::vector< std::tr1::shared_ptr<Texture2D> > mGBuffer;
 // Handy cache of list of RT pointers for G-buffer
 std::vector<ID3D11RenderTargetView*> mGBufferRTV;
@@ -137,6 +138,7 @@ ID3D11Buffer*               g_pcbPSPerFrame = NULL;
 #define IDC_CHECKBOX_USE_SPARK  5
 #define IDC_CHECKBOX_DEFERRED   6
 #define IDC_CHECKBOX_SPOTLIGHT  7
+#define IDC_CHECKBOX_SHADOW     8
 
 //--------------------------------------------------------------------------------------
 // Forward declarations 
@@ -167,7 +169,10 @@ void FinalizeApp();
 
 
 // DS
-void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, ID3D11VertexShader *pVS, ID3D11PixelShader *pPS );
+void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, 
+    float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, 
+    ID3D11VertexShader *pVS, ID3D11PixelShader *pPS, CModelViewerCamera *pCamera,  
+    D3DXMATRIXA16 * mCenter );
 
 void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, 
     D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, 
@@ -176,7 +181,7 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
 
 void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetView* pRTV, 
     ID3D11DepthStencilView* pDSV, ID3D11Device* pd3dDevice, ID3D11VertexShader *pVS, 
-    ID3D11PixelShader *pPS, Base * sparkShader );
+    ID3D11PixelShader *pPS, Base * sparkShader, CModelViewerCamera *pCamera, D3DXMATRIXA16 *mCenter  );
 
 void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice )
 {
@@ -200,7 +205,8 @@ void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice
         d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), &mGBufferRTV.front(), mDepthBuffer->GetDepthStencil());
     }
 
-    RenderScene(d3dDeviceContext, NULL, mDepthBuffer->GetDepthStencil(), pDevice, g_pVertexShader, gGBufferPS, gGenerateGBufferSpark);
+    RenderScene(d3dDeviceContext, NULL, mDepthBuffer->GetDepthStencil(), pDevice, 
+        g_pVertexShader, gGBufferPS, gGenerateGBufferSpark, &g_Camera, &g_mCenterMesh);
 
 }
 
@@ -270,6 +276,7 @@ void InitApp()
     g_HUD.AddCheckBox( IDC_CHECKBOX_USE_SPARK, L"Use Spar(K)", 0, iY += 26, 140, 24, gUseSpark, 'K' );
     g_HUD.AddCheckBox( IDC_CHECKBOX_DEFERRED, L"Use Deferred (D)", 0, iY += 26, 140, 24, gUseDeferred, 'D' );
     g_HUD.AddCheckBox( IDC_CHECKBOX_SPOTLIGHT, L"Use Spotlight (S)", 0, iY += 26, 140, 24, gUseSpotLight, 'S' );
+    g_HUD.AddCheckBox( IDC_CHECKBOX_SHADOW, L"Shadow (L)", 0, iY += 26, 140, 24, gShadow, 'L' );
 
     g_SampleUI.SetCallback( OnGUIEvent ); iY = 10;
 
@@ -439,6 +446,10 @@ void CALLBACK OnGUIEvent( UINT nEvent, int nControlID, CDXUTControl* pControl, v
 
         case IDC_CHECKBOX_SPOTLIGHT:
             gUseSpotLight = ((CDXUTCheckBox*)pControl)->GetChecked();
+            break;
+
+        case IDC_CHECKBOX_SHADOW:
+            gShadow = ((CDXUTCheckBox*)pControl)->GetChecked();
             break;
     }
 
@@ -644,7 +655,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     g_Camera.SetRadius( fObjectRadius * 3.0f, fObjectRadius * 0.5f, fObjectRadius * 10.0f );
 
     // Setup the spotlight's view parameters
-    D3DXVECTOR3 vecSpotLight( 0.0f, 1.2 * fObjectRadius, 0.0f );
+    D3DXVECTOR3 vecSpotLight( fObjectRadius, 1.2 * fObjectRadius, 0.0f );
     D3DXVECTOR3 vecSpotLightLookAt ( 0.0f, 0.0f, 0.0f );
     g_SpotLight.SetViewParams( &vecSpotLight, &vecSpotLightLookAt );
     // May change this later
@@ -679,7 +690,7 @@ HRESULT CALLBACK OnD3D11ResizedSwapChain( ID3D11Device* pd3dDevice, IDXGISwapCha
 
     g_SpotLightAspect = 1.0f;
     g_SpotLight.SetProjParams( g_SpotLightFOV, g_SpotLightAspect, 2.0f, 4000.0f );
-//    g_SpotLight.SetWindow( pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height );
+    g_SpotLight.SetWindow( pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height );
 //    g_SpotLight.SetButtonMasks( MOUSE_MIDDLE_BUTTON, MOUSE_WHEEL, MOUSE_LEFT_BUTTON );
 
 
@@ -946,6 +957,19 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
     }
     float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
+    ID3D11RenderTargetView* pNullRTV[] = {NULL};
+    pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, pDSV);
+
+    // Generate the shadow map.
+    pd3dImmediateContext->ClearDepthStencilView( pDSV, D3D11_CLEAR_DEPTH, 1.0, 0 );
+//    D3DXMATRIXA16 mSpotLightWorld;
+//    D3DXMatrixTranslation(&mSpotLightWorld, 0, 0, 0);
+//    auto m = g_SpotLight.GetWorldMatrix();
+//    D3DXMatrixMultiply(&mSpotLightWorld, &mSpotLightWorld, m);
+    RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, gForwardPS, gForwardSpark, &g_SpotLight, &g_mCenterMesh);
+
+
+    pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
     pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
 
     ID3D11PixelShader * pPS = NULL;
@@ -960,7 +984,7 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
             pPS = gForwardSpotlightPS;
         }
     
-        RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, pPS, gForwardSpark);
+        RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, pPS, gForwardSpark, &g_Camera, &g_mCenterMesh);
     }
 
     pd3dImmediateContext->OMSetBlendState(NULL, NULL, 0xFFFFFFFF);
@@ -969,7 +993,8 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
 
 void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, 
     float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, 
-    ID3D11VertexShader *pVS, ID3D11PixelShader *pPS )
+    ID3D11VertexShader *pVS, ID3D11PixelShader *pPS, CModelViewerCamera *pCamera, 
+    D3DXMATRIXA16 * mCenter )
 {
     HRESULT hr;
 
@@ -984,7 +1009,7 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
     CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
     pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
 
-    D3DXMatrixTranspose( &pPerFrame->m_CameraProj, g_Camera.GetProjMatrix() );
+    D3DXMatrixTranspose( &pPerFrame->m_CameraProj, pCamera->GetProjMatrix() );
 
     pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
     pPerFrame->m_SpotLightDir = vSpotLightDirView;
@@ -1013,9 +1038,9 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
     pd3dImmediateContext->PSSetShader( pPS, NULL, 0 );
 
     // Set the per object constant data
-    mWorld = g_mCenterMesh * *g_Camera.GetWorldMatrix();
-    mProj = *g_Camera.GetProjMatrix();
-    mView = *g_Camera.GetViewMatrix();
+    mWorld = *mCenter * *(pCamera->GetWorldMatrix());
+    mProj = *(pCamera->GetProjMatrix());
+    mView = *(pCamera->GetViewMatrix());
 
     D3DXMATRIX mWorldViewProjection;
     mWorldViewProjection = mWorld * mView * mProj;
@@ -1030,7 +1055,7 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
     D3DXMatrixTranspose( &pVSPerObject->m_World, &mWorld );
     D3DXMatrixTranspose( &pVSPerObject->m_WorldView, &mWorldView );
     pd3dImmediateContext->Unmap( g_pcbVSPerObject, 0 );
-    pVSPerObject->m_vCameraPos = D3DXVECTOR4(*g_Camera.GetEyePt(), 1.0f);
+    pVSPerObject->m_vCameraPos = D3DXVECTOR4(*(pCamera->GetEyePt()), 1.0f);
 
     pd3dImmediateContext->VSSetConstantBuffers( g_iCBVSPerObjectBind, 1, &g_pcbVSPerObject );
 
@@ -1158,7 +1183,7 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
 
 void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetView* pRTV, 
     ID3D11DepthStencilView* pDSV, ID3D11Device* pd3dDevice, ID3D11VertexShader *pVS, 
-    ID3D11PixelShader *pPS, Base * sparkShader )
+    ID3D11PixelShader *pPS, Base * sparkShader, CModelViewerCamera *pCamera,  D3DXMATRIXA16 * mCenter)
 {
     // Common:
     D3DXVECTOR3 vLightDir;
@@ -1167,18 +1192,16 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     D3DXMATRIX mProj;
 
     // Get the projection & view matrix from the camera class
-    mProj = *g_Camera.GetProjMatrix();
-    mView = *g_Camera.GetViewMatrix();
-    D3DXVECTOR3 vCameraPos = *g_Camera.GetEyePt();
+    D3DXVECTOR3 vCameraPos = *(pCamera->GetEyePt());
 
     // Get the light direction
     vLightDir = g_LightControl.GetLightDirection();
 
     float fAmbient = 0.1f;
 
-    mWorld = g_mCenterMesh * *g_Camera.GetWorldMatrix();
-    mProj = *g_Camera.GetProjMatrix();
-    mView = *g_Camera.GetViewMatrix();
+    mWorld = *mCenter * *(pCamera->GetWorldMatrix());
+    mProj = *(pCamera->GetProjMatrix());
+    mView = *(pCamera->GetViewMatrix());
     
     D3DXVECTOR4 vLightDir4 = D3DXVECTOR4(vLightDir, 0.0f);
     D3DXVec4Transform(&vLightDir4, &vLightDir4, &mView);
@@ -1187,7 +1210,7 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     // D3D11:
     if(!gUseSpark)
     {
-        RenderSceneHLSL(pd3dImmediateContext, vLightDir, fAmbient, mWorld, mProj, mView, pVS, pPS);
+        RenderSceneHLSL(pd3dImmediateContext, vLightDir, fAmbient, mWorld, mProj, mView, pVS, pPS, pCamera, mCenter);
     }
     else
     {
