@@ -119,7 +119,7 @@ float4 PSMainSpotLight( PS_INPUT Input ) : SV_TARGET
     float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
 //    float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
 //    fLighting = max( fLighting, g_fAmbient );
-    return ComputeSpotLighting(vDiffuse, Input.vPositionView, Input.vNormal);
+    return ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), Input.vPositionView, Input.vNormal);
 }
 
 //--------------------------------------------------------------------------------------
@@ -260,5 +260,5 @@ float4 DirectionalLightPS(FullScreenTriangleVSOut input) : SV_Target
 float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
 {
     SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), 0);
-    return ComputeSpotLighting(surface.albedo, surface.positionView, surface.normal);
+    return ComputeSpotLighting(/*surface.albedo*/float4(1.0f, 0.0f, 1.0f, 0.0f), surface.positionView, surface.normal);
 }

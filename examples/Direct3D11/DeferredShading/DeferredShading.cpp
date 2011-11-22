@@ -55,13 +55,16 @@ ID3D11VertexShader*         g_pVertexShader = NULL;
 ID3D11VertexShader*         gFullScreenTriangleVS = NULL;
 
 ID3D11PixelShader*          gForwardPS = NULL;
+ID3D11PixelShader*          gForwardSpotlightPS = NULL;
 ID3D11SamplerState*         g_pSamLinear = NULL;
 ID3D11PixelShader*          gGBufferPS = NULL;
 ID3D11PixelShader*          gDirectionalLightPS = NULL;
 ID3D11PixelShader*          gSpotLightPS = NULL;
 
 ID3D11BlendState* mLightingBlendState;
+ID3D11BlendState* mNoBlendState;
 ID3D11DepthStencilState* mEqualStencilState;
+ID3D11DepthStencilState* mLessThanStencilState;
 
 
 // DS
@@ -515,6 +518,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     ID3DBlob* pFullScreenVSBuffer = NULL;
 
     ID3DBlob* pForwardPSBuffer = NULL;
+    ID3DBlob* pForwardSpotlightPSBuffer = NULL;
     ID3DBlob* pGBufferPSBuffer = NULL;
     ID3DBlob* pDirectionalLightPSBuffer = NULL;
     ID3DBlob* pSpotLightPSBuffer = NULL;
@@ -526,6 +530,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
             V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_5_0", &pVertexShaderBuffer ) );
             V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "FullScreenTriangleVS", "vs_5_0", &pFullScreenVSBuffer ) );
             V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_5_0", &pForwardPSBuffer ) );
+            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMainSpotLight", "ps_5_0", &pForwardSpotlightPSBuffer ) );
             V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "GBufferPS", "ps_5_0", &pGBufferPSBuffer ) );
             V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "DirectionalLightPS", "ps_5_0", &pDirectionalLightPSBuffer) );
             V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "SpotLightPS", "ps_5_0", &pSpotLightPSBuffer) );
@@ -540,6 +545,8 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
                                               pFullScreenVSBuffer->GetBufferSize(), NULL, &gFullScreenTriangleVS) );
     V_RETURN( pd3dDevice->CreatePixelShader( pForwardPSBuffer->GetBufferPointer(),
                                              pForwardPSBuffer->GetBufferSize(), NULL, &gForwardPS ) );
+    V_RETURN( pd3dDevice->CreatePixelShader( pForwardSpotlightPSBuffer->GetBufferPointer(),
+                                             pForwardSpotlightPSBuffer->GetBufferSize(), NULL, &gForwardSpotlightPS ) );
     V_RETURN( pd3dDevice->CreatePixelShader( pGBufferPSBuffer->GetBufferPointer(),
                                              pGBufferPSBuffer->GetBufferSize(), NULL, &gGBufferPS) );
     V_RETURN( pd3dDevice->CreatePixelShader( pDirectionalLightPSBuffer->GetBufferPointer(),
@@ -560,6 +567,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
 
     SAFE_RELEASE( pVertexShaderBuffer );
     SAFE_RELEASE( pForwardPSBuffer );
+    SAFE_RELEASE (pForwardSpotlightPSBuffer);
     SAFE_RELEASE( pGBufferPSBuffer);
     SAFE_RELEASE ( pDirectionalLightPSBuffer );
     SAFE_RELEASE ( pSpotLightPSBuffer );
@@ -593,6 +601,10 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
         desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
         desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
         pd3dDevice->CreateBlendState(&desc, &mLightingBlendState);
+
+        desc.RenderTarget[0].BlendEnable = false;
+        pd3dDevice->CreateBlendState(&desc, &mNoBlendState);
+
     }
     // Lighting depth stencil state.
     {
@@ -603,6 +615,9 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
             D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_COMPARISON_EQUAL  // Back face stencil
             );
         pd3dDevice->CreateDepthStencilState(&desc, &mEqualStencilState);
+
+        desc.DepthFunc = D3D11_COMPARISON_LESS;
+        pd3dDevice->CreateDepthStencilState(&desc, &mLessThanStencilState);
     }
 
 
@@ -906,8 +921,10 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
     SAFE_RELEASE( g_pSamLinear );
     SAFE_RELEASE( gGBufferPS );
     SAFE_RELEASE( gDirectionalLightPS);
+    SAFE_RELEASE ( gForwardSpotlightPS );
     SAFE_RELEASE( mLightingBlendState );
     SAFE_RELEASE( mEqualStencilState );
+    SAFE_RELEASE( mLessThanStencilState );
 
     SAFE_RELEASE( g_pcbVSPerObject );
     SAFE_RELEASE( g_pcbPSPerObject );
@@ -927,10 +944,32 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
     if (gUseSpark) {
         gForwardSpark->SetMyTarget( pRTV );
     }
-    RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, gForwardPS, gForwardSpark);
+    float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
+    pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
+
+    ID3D11PixelShader * pPS = NULL;
+    for (UINT light = 0; light < 1 + gUseSpotLight; ++light)
+    {
+        if (light == 0) {
+            pPS = gForwardPS;
+        }
+        else {
+            pd3dImmediateContext->OMSetBlendState(mLightingBlendState, 0, 0xFFFFFFFF);
+            pd3dImmediateContext->OMSetDepthStencilState(mEqualStencilState, 0);
+            pPS = gForwardSpotlightPS;
+        }
+    
+        RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, pPS, gForwardSpark);
+    }
+
+    pd3dImmediateContext->OMSetBlendState(NULL, NULL, 0xFFFFFFFF);
+    pd3dImmediateContext->OMSetDepthStencilState(NULL, 0);
 }
 
-void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, ID3D11VertexShader *pVS, ID3D11PixelShader *pPS )
+void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, 
+    float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, 
+    ID3D11VertexShader *pVS, ID3D11PixelShader *pPS )
 {
     HRESULT hr;
 
@@ -1003,6 +1042,7 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
 
     pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
 
+#if 0
     //Render
     SDKMESH_SUBSET* pSubset = NULL;
     D3D11_PRIMITIVE_TOPOLOGY PrimType;
@@ -1023,6 +1063,32 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
 
         pd3dImmediateContext->DrawIndexed( ( UINT )pSubset->IndexCount, 0, ( UINT )pSubset->VertexStart );
     }
+#else
+
+
+        //Render
+        SDKMESH_SUBSET* pSubset = NULL;
+        D3D11_PRIMITIVE_TOPOLOGY PrimType;
+
+        pd3dImmediateContext->PSSetSamplers( 0, 1, &g_pSamLinear );
+
+        for( UINT subset = 0; subset < g_Mesh11.GetNumSubsets( 0 ); ++subset )
+        {
+            // Get the subset
+            pSubset = g_Mesh11.GetSubset( 0, subset );
+
+            PrimType = CDXUTSDKMesh::GetPrimitiveType11( ( SDKMESH_PRIMITIVE_TYPE )pSubset->PrimitiveType );
+            pd3dImmediateContext->IASetPrimitiveTopology( PrimType );
+
+            // TODO: D3D11 - material loading
+            ID3D11ShaderResourceView* pDiffuseRV = g_Mesh11.GetMaterial( pSubset->MaterialID )->pDiffuseRV11;
+            pd3dImmediateContext->PSSetShaderResources( 0, 1, &pDiffuseRV );
+
+            pd3dImmediateContext->DrawIndexed( ( UINT )pSubset->IndexCount, 0, ( UINT )pSubset->VertexStart );
+        }
+
+#endif
+
 }
 
 void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, 
