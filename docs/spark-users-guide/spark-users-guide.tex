@@ -38,7 +38,7 @@
 \definecolor{keyword_color}{RGB}{0,32,96}
 \definecolor{comment_color}{RGB}{192,0,0}
 \definecolor{type_color}{RGB}{0,112,192}
-\definecolor{keyword_arg_color}{RGB}{144,155,170}
+\definecolor{keyword_arg_color}{RGB}{144,77,135}
 
 \lstdefinestyle{spark_style}{
     basicstyle=\small\ttfamily,
@@ -63,7 +63,9 @@
         BasicSpark11,byte,short,half,double,DepthStencilView,ID3D11DepthStencilView,D3D11GeometryShader,GeometryInput,
         GeometryOutput,Stream,D3D11NullTessellation,D3D11Tessellation,PatchCorner,PatchEdge,PatchInterior,
         Base,Derived,MyRecord,MyShader,PhongMaterial,SimpleAttribute,SomeMethods,SimpleRecord,Light,
-        ID3D11IndexBuffer,D3D11_PRIMITIVE_TOPOLOGY,UINT,ID3D11IndexBuffer,DXGI_FORMAT,TessellationPartitioning,TessellationOutputTopology},
+        ID3D11IndexBuffer,D3D11_PRIMITIVE_TOPOLOGY,UINT,ID3D11IndexBuffer,DXGI_FORMAT,TessellationPartitioning,TessellationOutputTopology,
+        RasterizerState,ID3D11RasterizerState,DepthStencilState,ID3D11DepthStencilState,DepthStencilView,ID3D11DepthStencilView,D3D11GeometryShader,GeometryInput,
+        GeometryOutput,Stream,D3D11NullTessellation,D3D11Tessellation,PatchCorner,PatchEdge,PatchInterior,D3D11QuadTessellation,D3D11TriTessellation,},
     keywordstyle=\color{type_color}\ttfamily,
     classoffset=0,
     moredelim=[is][\color{keyword_arg_color}\ttfamily]{|}{|},
@@ -95,8 +97,7 @@
         CubicGregoryQuads,Tris,Quads,DisplacementMapping,RenderToCubeMap,PointSprites,
         Phong,EnvMap,PointLight,SpotLight,Range,bool,ubyte,unorm,ushort,uint,
         ubyte4,unorm4,uint4,float3x3,float4x3,SamplerState,Texture2D,TextureCube,Buffer,DrawSpan,PNU,
-        BasicSpark11,byte,short,half,double,DepthStencilView,ID3D11DepthStencilView,D3D11GeometryShader,GeometryInput,
-        GeometryOutput,Stream,D3D11NullTessellation,D3D11Tessellation,PatchCorner,PatchEdge,PatchInterior},
+        BasicSpark11,byte,short,half,double},
     keywordstyle=\color{type_color}\ttfamily,
     classoffset=0,
     moredelim=[is][\color{keyword_arg_color}\ttfamily]{|}{|},
@@ -970,7 +971,7 @@ abstract shader class SimpleRecord extends D3D11DrawPass
 
     float ComputeLighting( float3 normal, float3 lightDir, float4 diffuse );
     {
-        Light aLight = Light( L: lightDir, N: normal );
+        Light aLight = Light( |L:| lightDir, |N:| normal );
         return diffuse * ( nDotL @ aLight );
     }
 }
@@ -1029,10 +1030,10 @@ Each attribute declaration in Spark corresponds to several parts of the C++ \kw{
 To construct an instance of a record type:
 \begin{codeblock}
 \begin{spark}
-Light aLight = Light( L: lightDir, N: normal );
+Light aLight = Light( |L:| lightDir, |N:| normal );
 \end{spark}
 \end{codeblock}
-we use \code{key: value} parameter-passing syntax to specify a value for each of the \kw{input} attributes of the \code{Light} record.
+we use \code{|key:| value} parameter-passing syntax to specify a value for each of the \kw{input} attributes of the \code{Light} record.
 
 \section{Projection}
 \label{sec:projectionguide}
@@ -1449,10 +1450,51 @@ In order to drive the rasterizer, a shader must override the \kw{abstract} attri
 \end{tabularx}
 \end{stdlibx}
 
+Rasterization is also controlled by fixed-function state.
+A Spark shader specifies the rasterization state to use with the \code{RS\_State} attribute:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{type RasterizerState;}    \desc{Equivalent to C++ \code{ID3D11RasterizerState*}}
+\longdecl{virtual @Uniform RasterizerState RS_State;}  \desc{Fixed-function state to use for rasterization}
+\end{tabularx}
+\end{stdlibx}
+By default (i.e., if a shader does not override \code{RS\_State}) a Spark shader will use the ``null'' rasterization state defined by Direct3D~11.
+
+The simplest way to set rasterization state (other than using the default) is to expose it as a \code{@Uniform} shader parameter:
+\begin{codeblockx}{Spark}
+\begin{spark}
+input @Uniform RasterizerState myRasterizerState;
+override RS_State = myRasterizerState;
+\end{spark}
+\end{codeblockx}
+\begin{codeblockx}{C++}
+\begin{spark}
+myShader->SetMyRasterizerState( aRasterizerState );
+\end{spark}
+\end{codeblockx}
+
+It is also possible to create and set rasterization state entirely within Spark:
+\begin{codeblock}
+\begin{spark}
+// Render in wireframe mode
+override RS_State = RasterizerState(
+    |fillMode:|               D3D11_FILL_WIREFRAME,
+    |cullMode:|               D3D11_CULL_NONE,
+    |frontCounterClockwise:|  false,
+    |depthBias:|              0,
+    |slopeScaledDepthBias:|   0.0f,
+    |depthBiasClamp:|         0.0f,
+    |depthClipEnable:|        true,
+    |scissorEnable:|          false,
+    |multisampleEnable:|      false,
+    |antialiasedLineEnable:|  false );
+\end{spark}
+\end{codeblock}
+
 \begin{note}
-Spark does not currently expose the fixed-function rasterization state to shader writers.
-This will be fixed in a future release.
-At present, a Spark shader will always render using whatever rasterization state is bound to the device context.
+Spark does not currently expose the fixed-function state for viewports and scissor rectangles.
+At present, a Spark shader will always render using whatever viewports and scissor rectangles were previously bound to the device context.
 \end{note}
 
 \section{Pixel Shader}
@@ -1502,8 +1544,40 @@ The Output Merger (OM) is a fixed-function stage that takes the fragments shaded
 \end{stdlibx}
 A Spark shader writes to a render target by declaring a \code{output @Pixel} attribute.
 
+In order to specify a shader output that should be captured into a render target, the user declares a \code{output @Pixel} attribute:
+\begin{codeblock}
+\begin{spark}
+@Fragment float4 color = ...;
+output @Pixel float4 target = color;
+\end{spark}
+\end{codeblock}
+The above code writes per-fragment colors to the render target with no blending.
+In order to perform blending, we must be able to define how the value of a \emph{new} render-target pixel depends on the \emph{old} value at the same pixel.
+To express this, blending logic in Spark may make use of the built-in attribute \code{OM\_Dest}:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{@Pixel Pixel OM_Dest;}         \desc{Old value of destination pixel}
+\end{tabularx}
+\end{stdlibx}
+
+For example, the following code expresses simple additive blending:
+\begin{codeblock}
+\begin{spark}
+@Fragment float4 color = ...;
+output @Pixel float4 target = (target @ OM_Dest) + color;
+\end{spark}
+\end{codeblock}
+while the following expresses an ``over'' blend:
+\begin{codeblock}
+\begin{spark}
+@Fragment float4 color = ...;
+output @Pixel float4 target = (target @ OM_Dest) * (1 - color.w) + color * color.w;
+\end{spark}
+\end{codeblock}
+
 \begin{note}
-Spark does not currently support non-default blend modes.
+Spark's support for blending is still quite rudimentary. Some combinations of \code{@Pixel} operations will lead the compiler to give an error even when they could conceivably be mapped to valid Direct3D~11 blend modes.
 \end{note}
 
 \subsection{Depth/Stencil Testing}
@@ -1526,10 +1600,33 @@ shader->SetDepthStencilView( dsv );
 \end{cplusplus}
 \end{codeblock}
 
+In addition, the depth-stencil test is controlled by fixed-function state.
+A Spark shader specifies the depth-stencil state to use with the \code{OM\_DepthStencilState} attribute:
+\begin{stdlibx}
+\begin{tabularx}{\textwidth}{|X|X|}
+\stdlibheader
+\decl{type DepthStencilState;}    \desc{Equivalent to C++ \code{ID3D11DepthStencilState*}}
+\longdecl{virtual @Uniform DepthStencilState OM_DepthStencilState;}  \desc{Fixed-function state to use for depth-stencil test}
+\end{tabularx}
+\end{stdlibx}
+By default (i.e., if a shader does not override \code{OM\_DepthStencilState}) a Spark shader will use the ``null'' depth-stencil state defined by Direct3D~11.
+
+The simplest way to set depth-stencil state (other than using the default) is to expose it as a \code{@Uniform} shader parameter:
+\begin{codeblockx}{Spark}
+\begin{spark}
+input @Uniform DepthStencilState myDepthStencilState;
+override OM_DepthStencilState = myDepthStencilState;
+\end{spark}
+\end{codeblockx}
+\begin{codeblockx}{C++}
+\begin{spark}
+myShader->SetMyDepthStencilState( aDepthStencilState );
+\end{spark}
+\end{codeblockx}
+
 \begin{note}
-Spark does not currently expose the fixed-function depth/stencil state to shader writers.
-This will be fixed in a future release.
-At present, a Spark shader will always render using whatever depth/stencil state is bound to the device context.
+Spark does not currently expose functions for creating depth-stencil states from shader code.
+Any shader that needs to use non-default depth-stencil state must expose the state as a parameter.
 \end{note}
 
 \section{Tessellation}
@@ -1876,11 +1973,11 @@ shader class RenderToCubeMap extends BasicSpark11,
     override @GeometryOutput void GeometryShader()
     {
         Append( GS_OutputStream,
-            RasterVertex( myFineVertex: GS_InputVertices(0) ) );
+            RasterVertex( |myFineVertex:| GS_InputVertices(0) ) );
         Append( GS_OutputStream,
-            RasterVertex( myFineVertex: GS_InputVertices(1) ) );
+            RasterVertex( |myFineVertex:| GS_InputVertices(1) ) );
         Append( GS_OutputStream,
-            RasterVertex( myFineVertex: GS_InputVertices(2) ) );
+            RasterVertex( |myFineVertex:| GS_InputVertices(2) ) );
     }
 
     // Plumbing
@@ -1988,7 +2085,7 @@ The value for this attribute is specified for each \code{RasterVertex} we constr
 \begin{codeblock}
 \begin{spark}
 Append( GS_OutputStream,
-    RasterVertex( myFineVertex: GS_InputVertices(0) ) );
+    RasterVertex( |myFineVertex:| GS_InputVertices(0) ) );
 \end{spark}
 \end{codeblock}
 and we then use projection to fetch the attributes of this \code{FineVertex} as needed:
