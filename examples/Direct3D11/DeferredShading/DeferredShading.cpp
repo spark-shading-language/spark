@@ -187,6 +187,10 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     ID3D11DepthStencilView* pDSV, ID3D11Device* pd3dDevice, ID3D11VertexShader *pVS, 
     ID3D11PixelShader *pPS, Base * sparkShader, CModelViewerCamera *pCamera, D3DXMATRIXA16 *mCenter  );
 
+void UpdatePerFrameCB( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, CModelViewerCamera * pCamera );
+void SetIAState( ID3D11DeviceContext* pd3dImmediateContext );
+
+
 void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice )
 {
     // Clear GBuffer
@@ -1011,47 +1015,14 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
     pd3dImmediateContext->OMSetDepthStencilState(NULL, 0);
 }
 
+
+
 void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, 
     float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, 
     ID3D11VertexShader *pVS, ID3D11PixelShader *pPS, CModelViewerCamera *pCamera, 
     D3DXMATRIXA16 * mCenter )
 {
     HRESULT hr;
-
-    // Per frame cb update
-    D3D11_MAPPED_SUBRESOURCE MappedResource;
-    D3DXVECTOR4 vSpotLightPosView;
-    D3DXVECTOR4 vSpotLightDirView;
-    SetSpotLigtParameters(&vSpotLightPosView, &vSpotLightDirView);
-
-
-    V( pd3dImmediateContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
-    CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
-    pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
-
-    D3DXMatrixTranspose( &pPerFrame->m_CameraProj, pCamera->GetProjMatrix() );
-
-    pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
-    pPerFrame->m_SpotLightDir = vSpotLightDirView;
-    pPerFrame->m_SpotLightPos = vSpotLightPosView;
-    pPerFrame->m_SpotLightParameters = D3DXVECTOR4(g_SpotLightFOV, g_SpotLightAspect, g_SpotLight.GetNearClip(), g_SpotLight.GetFarClip());
-    pPerFrame->useSpotLight = gUseSpotLight;
-
-    pd3dImmediateContext->Unmap( g_pcbPSPerFrame, 0 );
-
-    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
-
-    //Get the mesh
-    //IA setup
-    pd3dImmediateContext->IASetInputLayout( g_pVertexLayout11 );
-    UINT Strides[1];
-    UINT Offsets[1];
-    ID3D11Buffer* pVB[1];
-    pVB[0] = g_Mesh11.GetVB11( 0, 0 );
-    Strides[0] = ( UINT )g_Mesh11.GetVertexStride( 0, 0 );
-    Offsets[0] = 0;
-    pd3dImmediateContext->IASetVertexBuffers( 0, 1, pVB, Strides, Offsets );
-    pd3dImmediateContext->IASetIndexBuffer( g_Mesh11.GetIB11( 0 ), g_Mesh11.GetIBFormat11( 0 ), 0 );
 
     // Set the shaders
     pd3dImmediateContext->VSSetShader( pVS, NULL, 0 );
@@ -1069,13 +1040,14 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
     mWorldView = mWorld * mView ;
 
     // VS Per object
+    D3D11_MAPPED_SUBRESOURCE MappedResource;
     V( pd3dImmediateContext->Map( g_pcbVSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
     CB_VS_PER_OBJECT* pVSPerObject = ( CB_VS_PER_OBJECT* )MappedResource.pData;
     D3DXMatrixTranspose( &pVSPerObject->m_WorldViewProj, &mWorldViewProjection );
     D3DXMatrixTranspose( &pVSPerObject->m_World, &mWorld );
     D3DXMatrixTranspose( &pVSPerObject->m_WorldView, &mWorldView );
-    pd3dImmediateContext->Unmap( g_pcbVSPerObject, 0 );
     pVSPerObject->m_vCameraPos = D3DXVECTOR4(*(pCamera->GetEyePt()), 1.0f);
+    pd3dImmediateContext->Unmap( g_pcbVSPerObject, 0 );
 
     pd3dImmediateContext->VSSetConstantBuffers( g_iCBVSPerObjectBind, 1, &g_pcbVSPerObject );
 
@@ -1181,6 +1153,7 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
 
 }
 
+
 void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetView* pRTV, 
     ID3D11DepthStencilView* pDSV, ID3D11Device* pd3dDevice, ID3D11VertexShader *pVS, 
     ID3D11PixelShader *pPS, Base * sparkShader, CModelViewerCamera *pCamera,  D3DXMATRIXA16 * mCenter)
@@ -1207,6 +1180,12 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     D3DXVec4Transform(&vLightDir4, &vLightDir4, &mView);
     vLightDir = D3DXVECTOR3(vLightDir4);
 
+    // Per frame cb update
+    UpdatePerFrameCB(pd3dImmediateContext, vLightDir, fAmbient, pCamera);
+    SetIAState(pd3dImmediateContext);
+
+    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
+
     // D3D11:
     if(!gUseSpark)
     {
@@ -1226,6 +1205,39 @@ void SetSpotLigtParameters( D3DXVECTOR4 * vSpotLightPosView, D3DXVECTOR4 * vSpot
     auto vSpotLightPosWorld = D3DXVECTOR4(*g_SpotLight.GetEyePt(), 1.0f) ;
     D3DXVec4Transform(vSpotLightPosView, &vSpotLightPosWorld, &viewMat);
     D3DXVec4Transform(vSpotLightDirView, &vDirWorld, &viewMat);
+}
+
+void UpdatePerFrameCB( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, CModelViewerCamera * pCamera )
+{
+    D3D11_MAPPED_SUBRESOURCE MappedResource;
+    D3DXVECTOR4 vSpotLightPosView;
+    D3DXVECTOR4 vSpotLightDirView;
+    SetSpotLigtParameters(&vSpotLightPosView, &vSpotLightDirView);
+
+    HRESULT hr;
+    V( pd3dImmediateContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
+    CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
+    pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
+    D3DXMatrixTranspose( &pPerFrame->m_CameraProj, pCamera->GetProjMatrix() );
+    pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
+    pPerFrame->m_SpotLightDir = vSpotLightDirView;
+    pPerFrame->m_SpotLightPos = vSpotLightPosView;
+    pPerFrame->m_SpotLightParameters = D3DXVECTOR4(g_SpotLightFOV, g_SpotLightAspect, g_SpotLight.GetNearClip(), g_SpotLight.GetFarClip());
+    pPerFrame->useSpotLight = gUseSpotLight;
+    pd3dImmediateContext->Unmap( g_pcbPSPerFrame, 0 );
+}
+
+void SetIAState( ID3D11DeviceContext* pd3dImmediateContext )
+{
+    pd3dImmediateContext->IASetInputLayout( g_pVertexLayout11 );
+    UINT Strides[1];
+    UINT Offsets[1];
+    ID3D11Buffer* pVB[1];
+    pVB[0] = g_Mesh11.GetVB11( 0, 0 );
+    Strides[0] = ( UINT )g_Mesh11.GetVertexStride( 0, 0 );
+    Offsets[0] = 0;
+    pd3dImmediateContext->IASetVertexBuffers( 0, 1, pVB, Strides, Offsets );
+    pd3dImmediateContext->IASetIndexBuffer( g_Mesh11.GetIB11( 0 ), g_Mesh11.GetIBFormat11( 0 ), 0 );
 }
 
 
