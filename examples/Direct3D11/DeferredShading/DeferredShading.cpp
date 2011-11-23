@@ -982,12 +982,8 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
 
     // Generate the shadow map.
     pd3dImmediateContext->ClearDepthStencilView( mShadowMap->GetDepthStencil(), D3D11_CLEAR_DEPTH, 1.0, 0 );
-//    D3DXMATRIXA16 mSpotLightWorld;
-//    D3DXMatrixTranslation(&mSpotLightWorld, 0, 0, 0);
-//    auto m = g_SpotLight.GetWorldMatrix();
-//    D3DXMatrixMultiply(&mSpotLightWorld, &mSpotLightWorld, m);
-    RenderScene(pd3dImmediateContext, pRTV, mShadowMap->GetDepthStencil(), pd3dDevice, g_pVertexShader, gForwardPS, gForwardSpark, &g_SpotLight, &g_mCenterMesh);
-
+    RenderScene(pd3dImmediateContext, pRTV, mShadowMap->GetDepthStencil(), 
+        pd3dDevice, g_pVertexShader, gForwardPS, gForwardSpark, &g_SpotLight, &g_mCenterMesh);
 
     pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
     pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
@@ -1091,7 +1087,6 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
 
     pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
 
-#if 0
     //Render
     SDKMESH_SUBSET* pSubset = NULL;
     D3D11_PRIMITIVE_TOPOLOGY PrimType;
@@ -1109,34 +1104,12 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
         // TODO: D3D11 - material loading
         ID3D11ShaderResourceView* pDiffuseRV = g_Mesh11.GetMaterial( pSubset->MaterialID )->pDiffuseRV11;
         pd3dImmediateContext->PSSetShaderResources( 0, 1, &pDiffuseRV );
+        auto shadowMapRSV = mShadowMap->GetShaderResource();
+        pd3dImmediateContext->PSSetShaderResources( 1, 1, &shadowMapRSV );
+
 
         pd3dImmediateContext->DrawIndexed( ( UINT )pSubset->IndexCount, 0, ( UINT )pSubset->VertexStart );
     }
-#else
-
-
-        //Render
-        SDKMESH_SUBSET* pSubset = NULL;
-        D3D11_PRIMITIVE_TOPOLOGY PrimType;
-
-        pd3dImmediateContext->PSSetSamplers( 0, 1, &g_pSamLinear );
-
-        for( UINT subset = 0; subset < g_Mesh11.GetNumSubsets( 0 ); ++subset )
-        {
-            // Get the subset
-            pSubset = g_Mesh11.GetSubset( 0, subset );
-
-            PrimType = CDXUTSDKMesh::GetPrimitiveType11( ( SDKMESH_PRIMITIVE_TYPE )pSubset->PrimitiveType );
-            pd3dImmediateContext->IASetPrimitiveTopology( PrimType );
-
-            // TODO: D3D11 - material loading
-            ID3D11ShaderResourceView* pDiffuseRV = g_Mesh11.GetMaterial( pSubset->MaterialID )->pDiffuseRV11;
-            pd3dImmediateContext->PSSetShaderResources( 0, 1, &pDiffuseRV );
-
-            pd3dImmediateContext->DrawIndexed( ( UINT )pSubset->IndexCount, 0, ( UINT )pSubset->VertexStart );
-        }
-
-#endif
 
 }
 

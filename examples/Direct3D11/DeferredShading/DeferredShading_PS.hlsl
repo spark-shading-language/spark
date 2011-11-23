@@ -38,6 +38,7 @@ cbuffer cbPerFrame : register( b1 )
 // Textures and Samplers
 //--------------------------------------------------------------------------------------
 Texture2D	g_txDiffuse : register( t0 );
+Texture2D   g_ShadowMap : register (t1 ) ;
 SamplerState g_samLinear : register( s0 );
 
 //--------------------------------------------------------------------------------------
