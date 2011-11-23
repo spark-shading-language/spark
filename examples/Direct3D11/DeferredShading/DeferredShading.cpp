@@ -173,10 +173,8 @@ void FinalizeApp();
 
 
 // DS
-void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, 
-    float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, 
-    ID3D11VertexShader *pVS, ID3D11PixelShader *pPS, CModelViewerCamera *pCamera,  
-    D3DXMATRIXA16 * mCenter );
+void RenderSceneHLSL(   ID3D11DeviceContext* pd3dImmediateContext,
+                        ID3D11VertexShader *pVS, ID3D11PixelShader *pPS);
 
 void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, 
     D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, 
@@ -189,7 +187,8 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
 
 void UpdatePerFrameCB( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, CModelViewerCamera * pCamera );
 void SetIAState( ID3D11DeviceContext* pd3dImmediateContext );
-
+void UpdatePerObjectCBVS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, ID3D11DeviceContext* pd3dImmediateContext );
+void UpdatePerObjectCBPS( ID3D11DeviceContext* pd3dImmediateContext );
 
 void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice )
 {
@@ -665,7 +664,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     g_Camera.SetRadius( fObjectRadius * 3.0f, fObjectRadius * 0.5f, fObjectRadius * 10.0f );
 
     // Setup the spotlight's view parameters
-    D3DXVECTOR3 vecSpotLight( fObjectRadius, 1.2 * fObjectRadius, 0.0f );
+    D3DXVECTOR3 vecSpotLight( fObjectRadius, 1.2f * fObjectRadius, 0.0f );
     D3DXVECTOR3 vecSpotLightLookAt ( 0.0f, 0.0f, 0.0f );
     g_SpotLight.SetViewParams( &vecSpotLight, &vecSpotLightLookAt );
     // May change this later
@@ -997,7 +996,7 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
 
 
     ID3D11PixelShader * pPS = NULL;
-    for (UINT light = 0; light < 1 + gUseSpotLight; ++light)
+    for (UINT light = 0; light < 1U + gUseSpotLight; ++light)
     {
         if (light == 0) {
             pPS = gForwardPS;
@@ -1016,48 +1015,13 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
 }
 
 
-
-void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, 
-    float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, 
-    ID3D11VertexShader *pVS, ID3D11PixelShader *pPS, CModelViewerCamera *pCamera, 
-    D3DXMATRIXA16 * mCenter )
+void RenderSceneHLSL(   ID3D11DeviceContext* pd3dImmediateContext, 
+                        ID3D11VertexShader *pVS, ID3D11PixelShader *pPS)
 {
-    HRESULT hr;
 
     // Set the shaders
     pd3dImmediateContext->VSSetShader( pVS, NULL, 0 );
     pd3dImmediateContext->PSSetShader( pPS, NULL, 0 );
-
-    // Set the per object constant data
-    mWorld = *mCenter * *(pCamera->GetWorldMatrix());
-    mProj = *(pCamera->GetProjMatrix());
-    mView = *(pCamera->GetViewMatrix());
-
-    D3DXMATRIX mWorldViewProjection;
-    mWorldViewProjection = mWorld * mView * mProj;
-
-    D3DXMATRIX mWorldView;
-    mWorldView = mWorld * mView ;
-
-    // VS Per object
-    D3D11_MAPPED_SUBRESOURCE MappedResource;
-    V( pd3dImmediateContext->Map( g_pcbVSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
-    CB_VS_PER_OBJECT* pVSPerObject = ( CB_VS_PER_OBJECT* )MappedResource.pData;
-    D3DXMatrixTranspose( &pVSPerObject->m_WorldViewProj, &mWorldViewProjection );
-    D3DXMatrixTranspose( &pVSPerObject->m_World, &mWorld );
-    D3DXMatrixTranspose( &pVSPerObject->m_WorldView, &mWorldView );
-    pVSPerObject->m_vCameraPos = D3DXVECTOR4(*(pCamera->GetEyePt()), 1.0f);
-    pd3dImmediateContext->Unmap( g_pcbVSPerObject, 0 );
-
-    pd3dImmediateContext->VSSetConstantBuffers( g_iCBVSPerObjectBind, 1, &g_pcbVSPerObject );
-
-    // PS Per object
-    V( pd3dImmediateContext->Map( g_pcbPSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
-    CB_PS_PER_OBJECT* pPSPerObject = ( CB_PS_PER_OBJECT* )MappedResource.pData;
-    pPSPerObject->m_vObjectColor = D3DXVECTOR4( 1, 1, 1, 1 );
-    pd3dImmediateContext->Unmap( g_pcbPSPerObject, 0 );
-
-    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
 
     //Render
     SDKMESH_SUBSET* pSubset = NULL;
@@ -1182,14 +1146,17 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
 
     // Per frame cb update
     UpdatePerFrameCB(pd3dImmediateContext, vLightDir, fAmbient, pCamera);
-    SetIAState(pd3dImmediateContext);
+    // Set the per object constant data
+    UpdatePerObjectCBVS(mCenter, pCamera, pd3dImmediateContext);
+    // PS Per object
+    UpdatePerObjectCBPS(pd3dImmediateContext);
 
-    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
+    SetIAState(pd3dImmediateContext);
 
     // D3D11:
     if(!gUseSpark)
     {
-        RenderSceneHLSL(pd3dImmediateContext, vLightDir, fAmbient, mWorld, mProj, mView, pVS, pPS, pCamera, mCenter);
+        RenderSceneHLSL(pd3dImmediateContext, pVS, pPS);
     }
     else
     {
@@ -1225,6 +1192,7 @@ void UpdatePerFrameCB( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &v
     pPerFrame->m_SpotLightParameters = D3DXVECTOR4(g_SpotLightFOV, g_SpotLightAspect, g_SpotLight.GetNearClip(), g_SpotLight.GetFarClip());
     pPerFrame->useSpotLight = gUseSpotLight;
     pd3dImmediateContext->Unmap( g_pcbPSPerFrame, 0 );
+    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
 }
 
 void SetIAState( ID3D11DeviceContext* pd3dImmediateContext )
@@ -1238,6 +1206,43 @@ void SetIAState( ID3D11DeviceContext* pd3dImmediateContext )
     Offsets[0] = 0;
     pd3dImmediateContext->IASetVertexBuffers( 0, 1, pVB, Strides, Offsets );
     pd3dImmediateContext->IASetIndexBuffer( g_Mesh11.GetIB11( 0 ), g_Mesh11.GetIBFormat11( 0 ), 0 );
+}
+
+void UpdatePerObjectCBVS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, ID3D11DeviceContext* pd3dImmediateContext )
+{
+    HRESULT hr = S_OK;
+    D3DXMATRIX mWorld, mView, mProj;
+    mWorld = *mCenter * *(pCamera->GetWorldMatrix());
+    mProj = *(pCamera->GetProjMatrix());
+    mView = *(pCamera->GetViewMatrix());
+
+    D3DXMATRIX mWorldViewProjection;
+    mWorldViewProjection = mWorld * mView * mProj;
+
+    D3DXMATRIX mWorldView;
+    mWorldView = mWorld * mView ;
+
+    D3D11_MAPPED_SUBRESOURCE MappedResource;
+    V( pd3dImmediateContext->Map( g_pcbVSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
+    CB_VS_PER_OBJECT* pVSPerObject = ( CB_VS_PER_OBJECT* )MappedResource.pData;
+    D3DXMatrixTranspose( &pVSPerObject->m_WorldViewProj, &mWorldViewProjection );
+    D3DXMatrixTranspose( &pVSPerObject->m_World, &mWorld );
+    D3DXMatrixTranspose( &pVSPerObject->m_WorldView, &mWorldView );
+    pVSPerObject->m_vCameraPos = D3DXVECTOR4(*(pCamera->GetEyePt()), 1.0f);
+    pd3dImmediateContext->Unmap( g_pcbVSPerObject, 0 );
+    pd3dImmediateContext->VSSetConstantBuffers( g_iCBVSPerObjectBind, 1, &g_pcbVSPerObject );
+}
+
+void UpdatePerObjectCBPS( ID3D11DeviceContext* pd3dImmediateContext )
+{
+    HRESULT hr = S_OK;
+    D3D11_MAPPED_SUBRESOURCE MappedResource;
+    V( pd3dImmediateContext->Map( g_pcbPSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
+    CB_PS_PER_OBJECT* pPSPerObject = ( CB_PS_PER_OBJECT* )MappedResource.pData;
+    pPSPerObject->m_vObjectColor = D3DXVECTOR4( 1, 1, 1, 1 );
+    pd3dImmediateContext->Unmap( g_pcbPSPerObject, 0 );
+
+    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
 }
 
 
