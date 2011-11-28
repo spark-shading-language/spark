@@ -480,7 +480,7 @@ abstract shader class D3D11DrawPass
     type SamplerState;
 
     [[Builtin("c++", "spark::d3d11::CreateSamplerState(device, {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})")]]
-    [[Builtin("llvm", "FooBarBaz!")]]
+    [[Builtin("llvm", "spark_d3d11_CreateSamplerState")]]
     @Constant SamplerState SamplerState(
         @Constant D3D11_FILTER                  filter,
         @Constant D3D11_TEXTURE_ADDRESS_MODE    addressU,
@@ -507,6 +507,49 @@ abstract shader class D3D11DrawPass
             mipLODBias: 0.0f,
             maxAnisotropy: uint(16),
             comparisonFunc: D3D11_COMPARISON_NEVER,
+            borderColor: float4(0.0f, 0.0f, 0.0f, 0.0f),
+            minLOD: -3.402823466e38f, // - FLT_MAX
+            maxLOD: 3.402823466e38f); //   FLT_MAX
+    }
+
+//--------------------------------------------------------------------------------------
+// type SamplerComparisonState
+//--------------------------------------------------------------------------------------
+
+    [[Builtin("hlsl", "SamplerComparisonState")]]
+    [[Builtin("c++", "ID3D11SamplerState*")]]
+    [[Builtin("llvm", "v*")]]
+    type SamplerComparisonState;
+
+    [[Builtin("c++", "spark::d3d11::CreateSamplerState(device, {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})")]]
+    [[Builtin("llvm", "spark_d3d11_CreateSamplerState")]]
+    @Constant SamplerComparisonState SamplerComparisonState(
+        @Constant D3D11_FILTER                  filter,
+        @Constant D3D11_TEXTURE_ADDRESS_MODE    addressU,
+        @Constant D3D11_TEXTURE_ADDRESS_MODE    addressV,
+        @Constant D3D11_TEXTURE_ADDRESS_MODE    addressW,
+        @Constant float                         mipLODBias,
+        @Constant uint                          maxAnisotropy,
+        @Constant D3D11_COMPARISON_FUNC         comparisonFunc,
+        @Constant float4                        borderColor,
+        @Constant float                         minLOD,
+        @Constant float                         maxLOD );
+
+    // helper function for a common case (all the
+    // addressing modes are the same).
+    @Constant SamplerComparisonState SamplerComparisonState(
+        @Constant D3D11_FILTER                  filter,
+        @Constant D3D11_TEXTURE_ADDRESS_MODE    address,
+        @Constant D3D11_COMPARISON_FUNC         comparisonFunc )
+    {
+        return SamplerComparisonState(
+            filter: filter,
+            addressU: address,
+            addressV: address,
+            addressW: address,
+            mipLODBias: 0.0f,
+            maxAnisotropy: uint(16),
+            comparisonFunc: comparisonFunc,
             borderColor: float4(0.0f, 0.0f, 0.0f, 0.0f),
             minLOD: -3.402823466e38f, // - FLT_MAX
             maxLOD: 3.402823466e38f); //   FLT_MAX
@@ -791,6 +834,14 @@ abstract shader class D3D11DrawPass
 
 	[[Builtin("hlsl", "({0}).SampleLevel({1}, {2}, {3})")]]
 	T SampleLevel[type T]( Texture2D[T] t, SamplerState s, float2 v, float level );
+
+
+	[[Builtin("hlsl", "({0}).SampleCmp({1}, {2}, {3})")]]
+	@Fragment float SampleCmp( @Fragment Texture2D[float] t, @Fragment SamplerComparisonState s, @Fragment float2 v, @Fragment float c );
+
+	[[Builtin("hlsl", "({0}).SampleCmpLevelZero({1}, {2}, {3})")]]
+	@Fragment float SampleCmpLevelZero( @Fragment Texture2D[float] t, @Fragment SamplerComparisonState s, @Fragment float2 v, @Fragment float c );
+
 
 	[[Builtin("hlsl", "({0}).Load({1}, {2})")]]
 	T Load[type T]( Texture2D[T] t, uint3 v );
