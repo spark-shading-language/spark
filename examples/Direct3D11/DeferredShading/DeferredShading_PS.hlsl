@@ -15,7 +15,9 @@
 //--------------------------------------------------------------------------------------
 cbuffer cbPerObject : register( b0 )
 {
-	float4		g_vObjectColor			: packoffset( c0 );
+    matrix      g_viewInv               : packoffset( c0);
+    matrix      g_LightViewProj         : packoffset( c4);
+	float4		g_vObjectColor			: packoffset( c8 );
 };
 
 cbuffer cbPerFrame : register( b1 )
@@ -28,28 +30,34 @@ cbuffer cbPerFrame : register( b1 )
     float4      g_SpotLightDir          : packoffset( c6 );
     float4      g_SpotLightParams       : packoffset( c7 );
 
-    uint        gUseSpotLight           : packoffset( c8 );
-//    uint        padding1;
-//    uint        padding2;
-//    uint        padding3;
+    uint        gUseSpotLight           : packoffset( c8.x );
+    uint        gShadow                 : packoffset( c8.y );
+    float       gShadowMapWidth         : packoffset( c8.z );
+    float       gShadowMapHeight        : packoffset( c8.w );
+
+    uint        gUseDirectionalLight    : packoffset( c9.x );
+    uint        padding1                : packoffset( c9.y );
+    uint        padding2                : packoffset( c9.z );
+    uint        padding3                : packoffset( c9.w );
 };
 
 //--------------------------------------------------------------------------------------
 // Textures and Samplers
 //--------------------------------------------------------------------------------------
-Texture2D	g_txDiffuse : register( t0 );
-Texture2D   g_ShadowMap : register (t1 ) ;
-SamplerState g_samLinear : register( s0 );
+Texture2D	            g_txDiffuse : register( t0 );
+Texture2D<float>        g_ShadowMap : register (t1 ) ;
+SamplerState            g_samLinear : register( s0 );
+SamplerComparisonState  g_samPCF    : register( s1 );
 
 //--------------------------------------------------------------------------------------
 // Input / Output structures
 //--------------------------------------------------------------------------------------
 struct PS_INPUT
 {
-	float3 vViewVector  : VIEWVECTOR;
-    float3 vPositionView : POSITION_VIEW;
-	float3 vNormal		: NORMAL;
-	float2 vTexcoord	: TEXCOORD0;
+    float3 vViewVector      : VIEWVECTOR;
+    float3 vPositionView    : POSITION_VIEW;
+    float3 vNormal          : NORMAL;
+    float2 vTexcoord        : TEXCOORD0;
 };
 
 // Data that we can read or derive from the surface shader outputs
@@ -108,19 +116,34 @@ float4 ComputeSpotLighting(float4 vDiffuse, float3 positionView, float3 normalVi
 //--------------------------------------------------------------------------------------
 float4 PSMain( PS_INPUT Input ) : SV_TARGET
 {
-    float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
+    if (gUseDirectionalLight) {
+        float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
     
-    float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
-    fLighting = max( fLighting, g_fAmbient );
-    return vDiffuse * fLighting;
+        float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
+        fLighting = max( fLighting, g_fAmbient );
+        return vDiffuse * fLighting; 
+    } else 
+        return float4(0, 0, 0, 1);
 }
 
 float4 PSMainSpotLight( PS_INPUT Input ) : SV_TARGET
 {
+    float shadow = 1.0f;
+    if (gShadow) {
+        float4 vPositionView = float4(Input.vPositionView, 1.0f);
+        float4 vPositionWorld = mul( vPositionView, g_viewInv );
+        float4 vPositionSM = mul(vPositionWorld, g_LightViewProj);
+        float3 ndc = vPositionSM.xyz/vPositionSM.w; 
+        float2 xy = (ndc.xy + float2(1.0f, 1.0f)) * 0.5f;
+        xy.y = 1.0f - xy.y;
+        shadow = g_ShadowMap.SampleCmpLevelZero(g_samPCF, xy, ndc.z);
+
+    }     
     float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
 //    float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
 //    fLighting = max( fLighting, g_fAmbient );
-    return ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), Input.vPositionView, Input.vNormal);
+//    return shadow * float4(xy.x, xy.y, 0.0, 1.0f);
+    return shadow * ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), Input.vPositionView, Input.vNormal);
 }
 
 //--------------------------------------------------------------------------------------
