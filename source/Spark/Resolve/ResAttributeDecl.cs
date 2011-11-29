@@ -160,12 +160,12 @@ namespace Spark.Resolve
             SourceRange range,
             ResAttributeDecl decl,
             IResMemberTerm memberTerm,
-            IResFreqQualType type,
-            IResExp init )
+            ILazy<IResFreqQualType> lazyType,
+            ILazy<IResExp> lazyInit )
             : base(range, decl, memberTerm)
         {
-            _type = type;
-            _init = init;
+            _lazyType = lazyType;
+            _lazyInit = lazyInit;
         }
 
         public ResAttributeRef(
@@ -174,26 +174,18 @@ namespace Spark.Resolve
             IResMemberTerm memberTerm)
             : base(range, decl, memberTerm)
         {
+            _lazyType = Lazy.New(new LazyFactory(), () => Decl.Type.Substitute<IResFreqQualType>(MemberTerm.Subst));
+            _lazyInit = Lazy.New(new LazyFactory(), () => Decl.Init == null ? null : Decl.Init.Substitute(MemberTerm.Subst));
         }
 
         public IResExp Init
         {
-            get
-            {
-                if (_init == null)
-                    _init = Decl.Init == null ? null : Decl.Init.Substitute(MemberTerm.Subst);
-                return _init;
-            }
+            get { return _lazyInit == null ? null : _lazyInit.Value; }
         }
 
         public IResFreqQualType Type
         {
-            get
-            {
-                if (_type == null)
-                    _type = Decl.Type.Substitute<IResFreqQualType>(MemberTerm.Subst);
-                return _type;
-            }
+            get { return _lazyType.Value; }
         }
         IResTypeExp IResExp.Type
         {
@@ -210,8 +202,8 @@ namespace Spark.Resolve
                 this.Range,
                 (ResAttributeDecl) memberTerm.Decl,
                 memberTerm,
-                Type.Substitute<IResFreqQualType>(subst),
-                Init == null ? null : Init.Substitute(subst));
+                Lazy.New(new LazyFactory(), () => Type.Substitute<IResFreqQualType>(subst)),
+                Lazy.New(new LazyFactory(), () => Init == null ? null : Init.Substitute(subst)));
         }
 
         public override IResMemberRef SubstituteMemberRef(Substitution subst)
@@ -220,7 +212,7 @@ namespace Spark.Resolve
         }
 
 
-        private IResFreqQualType _type;
-        private IResExp _init;
+        private ILazy<IResFreqQualType> _lazyType;
+        private ILazy<IResExp> _lazyInit;
     }
 }
