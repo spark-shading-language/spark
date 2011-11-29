@@ -620,7 +620,7 @@ abstract shader class D3D11DrawPass
 
     virtual output @Uniform DepthStencilState OM_DepthStencilState = __NullDepthStencilState();
 
-    virtual output @Uniform uint OM_StencilRef = uint(0xffffffff);
+    virtual output @Uniform uint OM_StencilRef = uint(0);
 
 //--------------------------------------------------------------------------------------
 // type RasterizerState
