@@ -141,10 +141,9 @@ abstract mixin shader class SpotLight
     //
     @Fragment float vis = 1.0f;
     @Fragment float4  lighting = ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), positionView, normal);
-    @Fragment float4 color    = float4(1.0f, 0, 0, 1); // vis * lighting ;
+    @Fragment float4 color    = vis * lighting ;
 
-    output @Pixel float4 myTarget = color;
-//    output @Pixel float4 myTarget = color + (myTarget @ OM_Dest) ;
+    output @Pixel float4 myTarget = color + (myTarget @ OM_Dest) ;
     override OM_DepthStencilState = myDepthStencilState;
 
 }
