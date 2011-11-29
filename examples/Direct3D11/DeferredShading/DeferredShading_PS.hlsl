@@ -125,25 +125,30 @@ float4 PSMain( PS_INPUT Input ) : SV_TARGET
     } else 
         return float4(0, 0, 0, 1);
 }
-
-float4 PSMainSpotLight( PS_INPUT Input ) : SV_TARGET
+float Visibility(float3 posView)
 {
-    float shadow = 1.0f;
+    float vis = 1.0f;
     if (gShadow) {
-        float4 vPositionView = float4(Input.vPositionView, 1.0f);
+        float4 vPositionView = float4(posView, 1.0f);
         float4 vPositionWorld = mul( vPositionView, g_viewInv );
         float4 vPositionSM = mul(vPositionWorld, g_LightViewProj);
         float3 ndc = vPositionSM.xyz/vPositionSM.w; 
         float2 xy = (ndc.xy + float2(1.0f, 1.0f)) * 0.5f;
         xy.y = 1.0f - xy.y;
-        shadow = g_ShadowMap.SampleCmpLevelZero(g_samPCF, xy, ndc.z);
+        vis = g_ShadowMap.SampleCmpLevelZero(g_samPCF, xy, ndc.z);
+    }
+    return vis;
+}
 
-    }     
+float4 PSMainSpotLight( PS_INPUT Input ) : SV_TARGET
+{
+    float visibility = Visibility(Input.vPositionView);
     float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
+    float3 normal = normalize(Input.vNormal);
 //    float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
 //    fLighting = max( fLighting, g_fAmbient );
 //    return shadow * float4(xy.x, xy.y, 0.0, 1.0f);
-    return shadow * ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), Input.vPositionView, normalize(Input.vNormal));
+    return visibility * ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), Input.vPositionView, normal);
 }
 
 //--------------------------------------------------------------------------------------
@@ -287,15 +292,6 @@ float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
 
     SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), 0);
     surface.normal = normalize(surface.normal);
-    float shadow = 1.0f;
-    if (gShadow) {
-        float4 vPositionView = float4(surface.positionView, 1.0f);
-        float4 vPositionWorld = mul( vPositionView, g_viewInv );
-        float4 vPositionSM = mul(vPositionWorld, g_LightViewProj);
-        float3 ndc = vPositionSM.xyz/vPositionSM.w; 
-        float2 xy = (ndc.xy + float2(1.0f, 1.0f)) * 0.5f;
-        xy.y = 1.0f - xy.y;
-        shadow = g_ShadowMap.SampleCmpLevelZero(g_samPCF, xy, ndc.z);
-    }     
-    return shadow * ComputeSpotLighting(/*surface.albedo*/float4(1.0f, 0.0f, 1.0f, 0.0f), surface.positionView, surface.normal);
+    float vis = Visibility(surface.positionView);
+    return vis * ComputeSpotLighting(/*surface.albedo*/float4(1.0f, 0.0f, 1.0f, 0.0f), surface.positionView, surface.normal);
 }
