@@ -94,9 +94,10 @@ ID3D11DepthStencilView* mDepthBufferReadOnlyDSV;
 
 
 // SPARK:
-bool gUseSpark = false;
+bool gUseSpark = true;
 spark::IContext* gSparkContext = nullptr;
 Forward* gForwardSpark = nullptr;
+ForwardSpotLight* gForwardSpotLightSpark = nullptr;
 GenerateGBuffer* gGenerateGBufferSpark= nullptr;
 DirectionalLightGBuffer * gDirectionalLightGBuffer = nullptr;
 
@@ -193,7 +194,7 @@ void RenderSceneHLSL(   ID3D11DeviceContext* pd3dImmediateContext,
 
 void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, 
     D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, 
-    float fAmbient, D3DXVECTOR3 vCameraPos, ID3D11Device* pd3dDevice, 
+    float fAmbient, ID3D11Device* pd3dDevice, 
     ID3D11DeviceContext* pd3dImmediateContext , Base * sparkShader);
 
 void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetView* pRTV, 
@@ -201,7 +202,10 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     ID3D11PixelShader *pPS, Base * sparkShader, CModelViewerCamera *pCamera,
     CModelViewerCamera * pLight, D3DXMATRIXA16 *mCenter  );
 
-void UpdatePerFrameCB( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, CModelViewerCamera * pCamera );
+void UpdatePerFrameCB(  ID3D11DeviceContext* pd3dImmediateContext, 
+                        D3DXVECTOR3 &vLightDir, float fAmbient, 
+                        CModelViewerCamera * pCamera, 
+                        Base * sparkShader );
 void SetIAState( ID3D11DeviceContext* pd3dImmediateContext );
 void UpdatePerObjectCBVS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, ID3D11DeviceContext* pd3dImmediateContext );
 void UpdatePerObjectCBPS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, 
@@ -731,6 +735,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
 
     // SPARK:
     gForwardSpark = gSparkContext->CreateShaderInstance<Forward>( pd3dDevice );
+    gForwardSpotLightSpark = gSparkContext->CreateShaderInstance<ForwardSpotLight>(pd3dDevice);
     gGenerateGBufferSpark = gSparkContext->CreateShaderInstance<GenerateGBuffer>( pd3dDevice );
     gDirectionalLightGBuffer = gSparkContext->CreateShaderInstance<DirectionalLightGBuffer>( pd3dDevice);
 
@@ -852,6 +857,12 @@ static spark::float3 Convert( const D3DXVECTOR3& v )
     return *reinterpret_cast<const spark::float3*>(&v);
 }
 
+static spark::float4 Convert( const D3DXVECTOR4& v )
+{
+    return *reinterpret_cast<const spark::float4*>(&v);
+}
+
+
 void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice );
 
 void SetSpotLigtParameters( D3DXVECTOR4 * vSpotLightPosView, D3DXVECTOR4 * vSpotLightDirView );
@@ -903,7 +914,7 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
         d3dDeviceContext->PSSetSamplers( 0, 1, &g_pSamLinear );
         d3dDeviceContext->PSSetSamplers( 1, 1, &g_pSamPCF );
 
-        UpdatePerFrameCB(d3dDeviceContext, vLightDir, fAmbient, &g_Camera);
+        UpdatePerFrameCB(d3dDeviceContext, vLightDir, fAmbient, &g_Camera, gDirectionalLightGBuffer);
         UpdatePerObjectCBPS(&g_mCenterMesh, &g_Camera, &g_SpotLight, d3dDeviceContext);
 
         d3dDeviceContext->PSSetShader(gDirectionalLightPS, 0, 0);
@@ -926,10 +937,14 @@ void GenerateShadowMap( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device*
     D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (shadowMapWidth), static_cast<FLOAT> (shadowMapHeight), 0.0f, 1.0f};
     pd3dImmediateContext->RSSetViewports(1, &viewPort);
 
+    if (gUseSpark) {
+        gForwardSpotLightSpark->SetMyTarget( NULL );
+    }
+
     // Generate the shadow map.
     pd3dImmediateContext->ClearDepthStencilView( mShadowMap->GetDepthStencil(), D3D11_CLEAR_DEPTH, 1.0, 0 );
     RenderScene(pd3dImmediateContext, pRTV, mShadowMap->GetDepthStencil(), 
-        pd3dDevice, g_pVertexShader, NULL, gForwardSpark, &g_SpotLight, &g_SpotLight, &g_mCenterMesh);
+        pd3dDevice, g_pVertexShader, NULL, gForwardSpotLightSpark, &g_SpotLight, &g_SpotLight, &g_mCenterMesh);
     pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, NULL);
 }
 
@@ -1023,6 +1038,7 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
 
     // SPARK:
     SAFE_RELEASE( gForwardSpark );
+    SAFE_RELEASE( gForwardSpotLightSpark );
     SAFE_RELEASE( gGenerateGBufferSpark);
     SAFE_RELEASE( gDirectionalLightGBuffer );
 }
@@ -1035,10 +1051,10 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
 {
     ID3D11RenderTargetView* pRTV = DXUTGetD3D11RenderTargetView();
     ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
-    if (gUseSpark) {
-        gForwardSpark->SetMyTarget( pRTV );
-    }
     GenerateShadowMap(pd3dImmediateContext, pd3dDevice, pRTV);
+//    if (gUseSpark) {
+//        gForwardSpark->SetMyTarget( pRTV );
+//    }
     float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
     pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
@@ -1048,19 +1064,27 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
     BindShadowMap(pd3dImmediateContext, 1);
 
     ID3D11PixelShader * pPS = NULL;
+    Base *pSparkShader = NULL;
     for (UINT light = 0; light < 1U + gUseSpotLight; ++light)
     {
         if (light == 0) {
             pPS = gForwardPS;
+            pSparkShader = gForwardSpark;
+            gForwardSpark->SetMyTarget( pRTV );
         }
         else {
-            pd3dImmediateContext->OMSetBlendState(mLightingBlendState, 0, 0xFFFFFFFF);
-            pd3dImmediateContext->OMSetDepthStencilState(mEqualStencilState, 0);
+            if (!gUseSpark) {
+                pd3dImmediateContext->OMSetBlendState(mLightingBlendState, 0, 0xFFFFFFFF);
+                pd3dImmediateContext->OMSetDepthStencilState(mEqualStencilState, 0);
+            } else {
+                gForwardSpotLightSpark->
+            }
             pPS = gForwardSpotlightPS;
+            pSparkShader = gForwardSpotLightSpark;
+            gForwardSpotLightSpark->SetMyTarget( pRTV );
         }
-    
         RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, 
-            pPS, gForwardSpark, &g_Camera, &g_SpotLight, &g_mCenterMesh);
+            pPS, pSparkShader, &g_Camera, &g_SpotLight, &g_mCenterMesh);
     }
 
     ResetState(pd3dImmediateContext, 1, 1);
@@ -1102,7 +1126,7 @@ void RenderSceneHLSL(   ID3D11DeviceContext* pd3dImmediateContext,
 
 void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, 
     D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, 
-    float fAmbient, D3DXVECTOR3 vCameraPos, ID3D11Device* pd3dDevice, 
+    float fAmbient, ID3D11Device* pd3dDevice, 
     ID3D11DeviceContext* pd3dImmediateContext, Base * sparkShader )
 {
     // Set color and depth/stencil targets
@@ -1116,7 +1140,6 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
     sparkShader->SetLightDir( Convert(vLightDir) );
     sparkShader->SetAmbient( fAmbient );
     sparkShader->SetLinearSampler( g_pSamLinear );
-//    gShaderInstance->SetCameraPos(Convert(vCameraPos));
 
     // Set up the vertex stream
     ID3D11Buffer* vb = g_Mesh11.GetVB11( 0, 0 );
@@ -1162,9 +1185,9 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
     }
 
     // Restore color and depth/stencil targets to what the D3D code expects
-    pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
-    D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (mGBufferWidth), static_cast<FLOAT> (mGBufferHeight), 0.0f, 1.0f};
-    pd3dImmediateContext->RSSetViewports(1, &viewPort);
+//    pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
+//    D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (mGBufferWidth), static_cast<FLOAT> (mGBufferHeight), 0.0f, 1.0f};
+//    pd3dImmediateContext->RSSetViewports(1, &viewPort);
 
 }
 
@@ -1197,7 +1220,7 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     vLightDir = D3DXVECTOR3(vLightDir4);
 
     // Per frame cb update
-    UpdatePerFrameCB(pd3dImmediateContext, vLightDir, fAmbient, pCamera);
+    UpdatePerFrameCB(pd3dImmediateContext, vLightDir, fAmbient, pCamera, sparkShader);
     // Set the per object constant data
     UpdatePerObjectCBVS(mCenter, pCamera, pd3dImmediateContext);
     // PS Per object
@@ -1213,7 +1236,7 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     else
     {
         // SPARK:
-        RenderSceneSpark(pRTV, pDSV, mWorld, mView, mProj, vLightDir, fAmbient, vCameraPos, pd3dDevice, pd3dImmediateContext, sparkShader);
+        RenderSceneSpark(pRTV, pDSV, mWorld, mView, mProj, vLightDir, fAmbient, pd3dDevice, pd3dImmediateContext, sparkShader);
     }
 }
 
@@ -1226,7 +1249,11 @@ void SetSpotLigtParameters( D3DXVECTOR4 * vSpotLightPosView, D3DXVECTOR4 * vSpot
     D3DXVec4Transform(vSpotLightDirView, &vDirWorld, &viewMat);
 }
 
-void UpdatePerFrameCB( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, CModelViewerCamera * pCamera )
+void UpdatePerFrameCB(  ID3D11DeviceContext* pd3dImmediateContext, 
+                        D3DXVECTOR3 &vLightDir, 
+                        float fAmbient, 
+                        CModelViewerCamera * pCamera, 
+                        Base * sparkShader )
 {
     D3D11_MAPPED_SUBRESOURCE MappedResource;
     D3DXVECTOR4 vSpotLightPosView;
@@ -1249,6 +1276,18 @@ void UpdatePerFrameCB( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &v
     pPerFrame->shadowMapHeight = shadowMapHeight;
     pd3dImmediateContext->Unmap( g_pcbPSPerFrame, 0 );
     pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
+
+    if (gUseSpark) {
+        sparkShader->SetG_SpotLightPosView(Convert(vSpotLightPosView));
+        sparkShader->SetG_SpotLightDir(Convert(vSpotLightDirView));
+        sparkShader->SetG_SpotLightParams(Convert(D3DXVECTOR4(g_SpotLightFOV * 0.5f, 
+                    g_SpotLightAspect, g_SpotLight.GetNearClip(), g_SpotLight.GetFarClip())));
+        sparkShader->SetGUseSpotLight(gUseSpotLight);
+        sparkShader->SetGShadow(gShadow);
+        sparkShader->SetGShadowMapWidth(static_cast<float>(shadowMapWidth));
+        sparkShader->SetGShadowMapHeight(static_cast<float>(shadowMapHeight));
+        sparkShader->SetGUseDirectionalLight(gUseDirectionalLight);
+    }
 }
 
 void SetIAState( ID3D11DeviceContext* pd3dImmediateContext )

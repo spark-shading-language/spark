@@ -40,6 +40,16 @@ abstract shader class Base extends D3D11DrawPass
 //    input @Uniform float3            cameraPos;
 //    abstract output @Pixel float4 myTarget ;
 
+    // SpotLight parameters.
+    input @Uniform float4       g_SpotLightPosView;
+    input @Uniform float4       g_SpotLightDir;
+    input @Uniform float4       g_SpotLightParams;
+    input @Uniform uint         gUseSpotLight;
+    input @Uniform uint         gShadow        ;
+    input @Uniform float        gShadowMapWidth;
+    input @Uniform float        gShadowMapHeight    ;
+    input @Uniform uint         gUseDirectionalLight;
+
 }
 
 abstract mixin shader class SurfaceAttributes extends D3D11DrawPass
@@ -102,6 +112,43 @@ abstract mixin shader class DirectionalLight
 
 shader class Forward extends GenerateSurfaceAttributes, DirectionalLight
 {}
+
+abstract mixin shader class SpotLight
+    extends Base, SurfaceAttributes
+{
+    @Fragment float4 ComputeSpotLighting(@Fragment float4 vDiffuse, 
+                                        @Fragment float3 positionView, 
+                                        @Fragment float3 normalView)
+    {
+        float D3DX_PI = 3.141592654f;
+
+        float d = distance(positionView, g_SpotLightPosView.xyz);
+        float3 lightDirView = normalize(g_SpotLightPosView.xyz - positionView);
+        float fLighting = saturate(dot(lightDirView, normalView));
+
+        float cosoutside = cos (g_SpotLightParams.x);
+        float cosinside = cos (g_SpotLightParams.x - D3DX_PI/36.0f);
+        float cosangle = saturate(dot(normalize(-g_SpotLightDir.xyz), lightDirView)) ;
+        float atten = pow(cosangle, 2.0f) / (d * d);
+        atten = atten * smoothstep(cosoutside, cosinside, cosangle);
+        float intensity = 20000.0f;
+        return atten * intensity *  vDiffuse * fLighting;
+    }
+
+    //@Fragment float4 color = float4(normal, 1.0f);
+    // @Pixel
+    //
+    @Fragment float vis = 1.0f;
+    @Fragment float4  lighting = ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), positionView, normal);
+    @Fragment float4 color    = vis * lighting ;
+
+    output @Pixel float4 myTarget = (myTarget @ OM_Dest) + color;
+}
+
+
+shader class ForwardSpotLight extends GenerateSurfaceAttributes, SpotLight
+{}
+
 
 abstract mixin shader class PackGBuffer
     extends Base, SurfaceAttributes
@@ -208,16 +255,3 @@ abstract mixin shader class FullScreenTriangle extends D3D11DrawPass
 shader class DirectionalLightGBuffer extends FullScreenTriangle, UnpackGBuffer, DirectionalLight
 {}
 
-abstract mixin shader class SpotLight
-    extends Base, SurfaceAttributes
-{
-
-    //@Fragment float4 color = float4(normal, 1.0f);
-    // @Pixel
-    //
-    @Fragment float4 diffuse  = albedo;
-    @Fragment float  lighting = max(saturate(dot(lightDir, normal)), ambient);
-    @Fragment float4 color    = diffuse * lighting ;
-
-    output @Pixel float4 myTarget = color;
-}
