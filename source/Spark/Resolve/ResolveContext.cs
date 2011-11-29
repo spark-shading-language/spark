@@ -5281,6 +5281,8 @@ namespace Spark.Resolve
                     ResMemberFlavor.TypeSlot},
                 env,
                 string.Format("Expected a {0}", kind));
+            if (type is ResErrorTerm)
+                return type;
 
             var fromKind = type.Kind;
 

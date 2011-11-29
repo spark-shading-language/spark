@@ -355,7 +355,9 @@ namespace Spark.Resolve
                 case 1:
                     return globalDecls[0].MakeRef( range );
                 default:
-                    throw new NotImplementedException();
+                    var refs = (from decl in globalDecls
+                                select decl.MakeRef(range)).Eager();
+                    return new ResOverloadedTerm(range, refs);
             }
         }
 
