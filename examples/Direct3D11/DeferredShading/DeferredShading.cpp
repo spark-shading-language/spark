@@ -1073,18 +1073,20 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
             gForwardSpark->SetMyTarget( pRTV );
         }
         else {
-            if (!gUseSpark) {
+            if (gUseSpark) {
+                gForwardSpotLightSpark->SetMyDepthStencilState(mEqualStencilState);
+            } else {
                 pd3dImmediateContext->OMSetBlendState(mLightingBlendState, 0, 0xFFFFFFFF);
                 pd3dImmediateContext->OMSetDepthStencilState(mEqualStencilState, 0);
-            } else {
-                gForwardSpotLightSpark->
             }
             pPS = gForwardSpotlightPS;
             pSparkShader = gForwardSpotLightSpark;
             gForwardSpotLightSpark->SetMyTarget( pRTV );
         }
+            DXUT_BeginPerfEvent( DXUT_PERFEVENTCOLOR, L"Spark::SetMyDepthStencilState" );
         RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, 
             pPS, pSparkShader, &g_Camera, &g_SpotLight, &g_mCenterMesh);
+            DXUT_EndPerfEvent( );
     }
 
     ResetState(pd3dImmediateContext, 1, 1);
