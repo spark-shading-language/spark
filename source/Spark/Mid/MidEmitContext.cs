@@ -57,19 +57,19 @@ namespace Spark.Mid
             throw new KeyNotFoundException();
         }
 
-        public void Insert(IResVarDecl key, MidVal value)
+        public void Insert(IResVarDecl key, Func<SourceRange,MidVal> value)
         {
             _values[key] = value;
         }
 
-        public MidVal Lookup(IResVarDecl key)
+        public MidVal Lookup(SourceRange range, IResVarDecl key)
         {
-            MidVal value;
-            if (_values.TryGetValue(key, out value))
-                return value;
+            Func<SourceRange, MidVal> generator;
+            if (_values.TryGetValue(key, out generator))
+                return generator(range);
 
             if (_parent != null)
-                return _parent.Lookup(key);
+                return _parent.Lookup(range, key);
 
             throw new KeyNotFoundException();
         }
@@ -96,15 +96,15 @@ namespace Spark.Mid
             if (key is IResTypeParamDecl)
                 Insert((IResTypeParamDecl)key, (MidType)value);
             else
-                Insert((IResVarDecl)key, (MidVal)value);
+                Insert((IResVarDecl)key, (SourceRange r) => (MidVal)value);
         }
 
-        public object Lookup(IResGenericParamDecl key)
+        public object Lookup(SourceRange range, IResGenericParamDecl key)
         {
             if (key is IResTypeParamDecl)
                 return Lookup( (IResTypeParamDecl) key );
             else
-                return Lookup((IResVarDecl)key);
+                return Lookup(range, (IResVarDecl)key);
         }
 
         public virtual MidEmitContext Context
@@ -119,7 +119,7 @@ namespace Spark.Mid
 
         protected MidEmitEnv _parent;
         private Dictionary<ResLabel, MidLabel> _labels = new Dictionary<ResLabel, MidLabel>();
-        private Dictionary<IResVarDecl, MidVal> _values = new Dictionary<IResVarDecl, MidVal>();
+        private Dictionary<IResVarDecl, Func<SourceRange, MidVal>> _values = new Dictionary<IResVarDecl, Func<SourceRange, MidVal>>();
         private Dictionary<IResTypeParamDecl, MidType> _types = new Dictionary<IResTypeParamDecl, MidType>();
 
         public IEnumerable<IResAttributeDecl> InheritedDecls
@@ -210,17 +210,17 @@ namespace Spark.Mid
             if( _element != null )
             {
                 var attrDecl = _element.CacheAttr( exp, type );
-                return _exps.AttributeRef( attrDecl );
+                return _exps.AttributeRef( exp.Range,  attrDecl );
             }
             else
             {
                 MidVar var = new MidVar( _identifiers.unique( "temp" ), type );
 
-                Func<MidExp, MidExp> wrapper = ( body ) => new MidLetExp( var, exp, body );
+                Func<MidExp, MidExp> wrapper = ( body ) => new MidLetExp( exp.Range, var, exp, body );
 
                 _wrappers.Insert( 0, wrapper );
 
-                return new MidVarRef( var );
+                return new MidVarRef( exp.Range, var );
             }
         }
 
@@ -306,7 +306,8 @@ namespace Spark.Mid
             MidEmitEnv env = new MidGlobalEmitEnv(outerEnv, outerEnv.Context);
             env.Insert(
                 resPipeline.ThisParameter,
-                    new MidLit<object>(null, new MidPipelineRef(midPipeline, null)));
+                (SourceRange r) =>
+                    new MidLit<object>(r, null, new MidPipelineRef(midPipeline, null)));
             midPipeline.Env = env;
 
             midPipeline.AddBuildAction(() =>
@@ -571,7 +572,7 @@ namespace Spark.Mid
                         var midParam = pair.Item1;
                         var resParam = pair.Item2;
 
-                        paramEnv.Insert(resParam, new MidVarRef(midParam));
+                        paramEnv.Insert(resParam, (SourceRange r) => new MidVarRef(r, midParam));
                     }
 
                     ((MidMethodDecl) midMethod).Body = EmitLocalExp(resMethod.Body, paramEnv);
@@ -602,7 +603,7 @@ namespace Spark.Mid
                 if (genericDecl != null)
                 {
                     args = (from p in genericDecl.Parameters
-                            select env.Lookup(p)).ToArray();
+                            select env.Lookup(p.Range, p)).ToArray();
                 }
 
                 var midBuiltin = new MidBuiltinTypeDecl(
@@ -849,9 +850,9 @@ namespace Spark.Mid
             var src = EmitVal(resAssign.Src, env);
 
             return new MidAssignExp(
+                resAssign.Range,
                 dest,
-                src,
-                resAssign.Range);
+                src );
         }
 
 
@@ -868,14 +869,14 @@ namespace Spark.Mid
             var seq = EmitVal(resFor.Sequence, env);
 
             var bodyEnv = new MidLocalEmitEnv( env, _identifiers, null, _exps );
-            bodyEnv.Insert(resVar, new MidVarRef(midVar));
+            bodyEnv.Insert(resVar, (SourceRange r) => new MidVarRef(r, midVar));
             var body = bodyEnv.Wrap(EmitVal(resFor.Body, bodyEnv));
 
             return new MidForExp(
+                resFor.Range,
                 midVar,
                 seq,
-                body,
-                resFor.Range);
+                body );
         }
 
 
@@ -905,6 +906,7 @@ namespace Spark.Mid
             var memberRefs = (from m in resConcept.MemberRefs
                               select EmitMemberTerm(m.MemberTerm, env)).ToArray();
             return new MidConceptVal(
+                resConcept.Range,
                 conceptClass,
                 memberRefs);
         }
@@ -931,7 +933,7 @@ namespace Spark.Mid
 
             env.Insert(
                 resLet.Var,
-                midVal);
+                (SourceRange r) => midVal);
 
             return EmitExpRaw(
                 resLet.Body,
@@ -948,6 +950,7 @@ namespace Spark.Mid
                         select EmitElementCtorArg(a, env)).ToArray();
 
             return new MidElementCtorApp(
+                ctorApp.Range,
                 elementDecl,
                 args);
         }
@@ -988,6 +991,7 @@ namespace Spark.Mid
                 var attrRef = (MidAttributeRef)attrVal;
 
                 return new MidAttributeFetch(
+                    attrFetch.Range,
                     obj,
                     attrVal.Type,
                     env.Lazy(() => attrRef.Decl));
@@ -1008,6 +1012,7 @@ namespace Spark.Mid
             var midBody = EmitLocalExp(exp.Body, localEnv);
             midBody = localEnv.Wrap( midBody );
             return new MidLabelExp(
+                exp.Range,
                 midLabel,
                 midBody,
                 midType);
@@ -1018,17 +1023,17 @@ namespace Spark.Mid
             MidLabel label = env.Lookup(exp.Label);
             MidVal val = EmitVal(exp.Value, env);
 
-            return new MidBreakExp(label, val);
+            return new MidBreakExp(exp.Range, label, val);
         }
 
         private MidExp EmitExpImpl<T>(ResLit<T> resLit, MidEmitEnv env)
         {
-            return _exps.Lit( resLit.Value, EmitTypeExp( resLit.Type, env ) );
+            return _exps.Lit( resLit.Range, resLit.Value, EmitTypeExp( resLit.Type, env ) );
         }
 
         private MidExp EmitExpImpl(ResVarRef resVarRef, MidEmitEnv env)
         {
-            return env.Lookup(resVarRef.Decl);
+            return env.Lookup(resVarRef.Range, resVarRef.Decl);
         }
 
         private MidExp EmitExpImpl(ResMethodApp resApp, MidEmitEnv env)
@@ -1064,7 +1069,7 @@ namespace Spark.Mid
                         var argVal = EmitValToElement(resArg, paramElement, bindEnv);
 
                         // insert value into env...
-                        bindEnv.Insert(resParam, argVal);
+                        bindEnv.Insert(resParam, (SourceRange r) => argVal);
                     }
 
                     return EmitVal( resBody, bindEnv );
@@ -1076,7 +1081,7 @@ namespace Spark.Mid
             var args = from a in resApp.Args
                        select EmitVal(a, env);
 
-            return methodRef.App(args);
+            return methodRef.App(resApp.Range, args);
         }
 
         private void BindForMemberTerm(
@@ -1093,7 +1098,7 @@ namespace Spark.Mid
             var objVal = EmitVal(memberBind.Obj, env);
             env.Insert(
                 memberBind.MemberSpec.Container.ThisParameter,
-                objVal);
+                (SourceRange r) => objVal);
         }
 
         private void BindForMemberTermImpl(
@@ -1133,7 +1138,7 @@ namespace Spark.Mid
             {
                 env.Insert(
                     param.Decl,
-                    midVal);
+                    (SourceRange r) => midVal);
             }
             return midVal;
         }
@@ -1227,7 +1232,7 @@ namespace Spark.Mid
             var attr = element.CacheAttr(
                 midExp,
                 midType );
-            return _exps.AttributeRef( attr );
+            return _exps.AttributeRef( resExp.Range, attr );
         }
 
         private MidExp EmitExpImpl(IResFieldRef resField, MidEmitEnv env)
@@ -1240,7 +1245,7 @@ namespace Spark.Mid
 
             var decl = (MidFieldDecl) container.LookupMemberDecl(resBind.Decl);
 
-            return _exps.FieldRef( obj, decl );
+            return _exps.FieldRef( resField.Range, obj, decl );
         }
 
         private MidExp EmitExpImpl(IResAttributeRef resAttrib, MidEmitEnv env)
@@ -1248,7 +1253,7 @@ namespace Spark.Mid
             var wrapper = (MidAttributeWrapperMemberRef) EmitMemberTerm(resAttrib.MemberTerm, env);
 
             var type = EmitTypeExp(resAttrib.Type, env);
-            return new MidAttributeRef(type, env.Lazy(() => {
+            return new MidAttributeRef(resAttrib.Range, type, env.Lazy(() => {
                 return wrapper.Decl.Attribute;
             }));
         }

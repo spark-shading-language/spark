@@ -1152,6 +1152,17 @@ void CALLBACK OnD3D11FrameRender( ID3D11Device* pd3dDevice, ID3D11DeviceContext*
         gSparkShaderInstance->SetTarget( DXUTGetD3D11RenderTargetView() );
         gSparkShaderInstance->SetDepthStencilView( DXUTGetD3D11DepthStencilView() );
 
+        // Set the rasterizer state
+        if( g_SampleUI.GetCheckBox( IDC_CHECKBOX_WIREFRAME )->GetChecked() )
+        {
+            gSparkShaderInstance->SetRasterizerState( g_pRasterizerStateWireframe );
+        }
+        else
+        {
+            gSparkShaderInstance->SetRasterizerState( g_pRasterizerStateSolid );
+        }
+
+
         gSparkShaderInstance->SetWorld( Convert( mWorld ) );
         gSparkShaderInstance->SetViewProjection( Convert( mViewProjection ) );
         gSparkShaderInstance->SetWorldViewProjection( Convert( mWorldViewProjection ) );

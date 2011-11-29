@@ -26,10 +26,11 @@ namespace Spark.Mid
     public class MidLabelExp : MidExp
     {
         public MidLabelExp(
+            SourceRange range,
             MidLabel label,
             MidExp body,
             MidType type)
-            : base(type)
+            : base(range, type)
         {
             _label = label;
             _body = body;
@@ -54,9 +55,10 @@ namespace Spark.Mid
     public class MidBreakExp : MidExp
     {
         public MidBreakExp(
+            SourceRange range,
             MidLabel label,
             MidVal value)
-            : base(new MidVoidType())
+            : base(range, new MidVoidType())
         {
             _label = label;
             _value = value;

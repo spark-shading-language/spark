@@ -122,14 +122,14 @@ namespace Spark.Mid
                 return exp;
 
             newAttr.TrySetName( oldAttr.Name, oldAttr.Range );
-            return _exps.AttributeRef( newAttr );
+            return _exps.AttributeRef( exp.Range, newAttr );
         }
 
         public MidAttributeFetch CleanupExp( MidAttributeFetch exp )
         {
             var oldAttr = exp.Attribute;
             var newAttr = MapOldToNew( oldAttr );
-            return _exps.AttributeFetch( exp.Obj, newAttr );
+            return _exps.AttributeFetch( exp.Range, exp.Obj, newAttr );
         }
 
         private MidAttributeDecl MapOldToNew( MidAttributeDecl old )
@@ -293,7 +293,7 @@ namespace Spark.Mid
         {
             if (val.IsLazy)
             {
-                return _exps.AttributeRef(val.Decl);
+                return _exps.AttributeRef(val.Range, val.Decl);
             }
             return val;
         }
@@ -301,6 +301,7 @@ namespace Spark.Mid
         private MidExp SimplifyExpImpl(MidAttributeFetch exp, SimplifyEnv env)
         {
             return _exps.AttributeFetch(
+                exp.Range,
                 exp.Obj,
                 exp.Attribute);
         }
@@ -404,9 +405,11 @@ namespace Spark.Mid
             if (!UsesLabel(letExp.Exp, labelExp.Label))
             {
                 MidExp result = new MidLetExp(
+                    letExp.Range,
                     letExp.Var,
                     letExp.Exp,
                     new MidLabelExp(
+                        labelExp.Range,
                         labelExp.Label,
                         letExp.Body,
                         letExp.Type));

@@ -44,6 +44,9 @@ shader class Base extends D3D11DrawPass
     input @Uniform SamplerState samplePoint;
     input @Uniform SamplerState sampleLinear;
 
+    // State objects
+    input @Uniform RasterizerState rasterizerState;
+
 //--------------------------------------------------------------------------------------
 // @AssembledVertex
 //--------------------------------------------------------------------------------------
@@ -92,6 +95,8 @@ shader class Base extends D3D11DrawPass
 //--------------------------------------------------------------------------------------
 
     override RS_Position = mul( float4( P_fine, 1.0f ), viewProjection );
+
+    override RS_State = rasterizerState;
 
 //--------------------------------------------------------------------------------------
 // @Fragment

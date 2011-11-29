@@ -1030,6 +1030,42 @@ namespace Spark.Emit
                 "ID3D11Buffer",
                 "Release");
 
+            // Now generate calls to bind the depth-stencil and rasterizer states
+
+            var rsStateAttr = FindAttribute(midPipeline, "Uniform", "RS_State").First();
+            var rsStateVal = EmitAttributeRef(
+                rsStateAttr,
+                block,
+                pipelineEnv);
+
+            block.CallCOM(
+                submitContext,
+                "ID3D11DeviceContext",
+                "RSSetState",
+                rsStateVal);
+
+
+            var omDepthStencilStateAttr = FindAttribute(midPipeline, "Uniform", "OM_DepthStencilState").First();
+            var omDepthStencilStateVal = EmitAttributeRef(
+                omDepthStencilStateAttr,
+                block,
+                pipelineEnv);
+
+            var omStencilRefAttr = FindAttribute(midPipeline, "Uniform", "OM_StencilRef").First();
+            var omStencilRefVal = EmitAttributeRef(
+                omStencilRefAttr,
+                block,
+                pipelineEnv);
+
+            block.CallCOM(
+                submitContext,
+                "ID3D11DeviceContext",
+                "OMSetDepthStencilState",
+                omDepthStencilStateVal,
+                omStencilRefVal);
+
+            
+            
             implClass.Seal();
 
             // Now we need to constrct the class-info

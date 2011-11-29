@@ -44,8 +44,9 @@ namespace Spark.Mid
     public class MidVarRef : MidVal
     {
         public MidVarRef(
+            SourceRange range,
             MidVar var)
-            : base(var.Type)
+            : base(range, var.Type)
         {
             _var = var;
         }
@@ -63,10 +64,11 @@ namespace Spark.Mid
     public class MidLetExp : MidExp
     {
         public MidLetExp(
+            SourceRange range,
             MidVar var,
             MidExp exp,
             MidExp body)
-            : base(new MidDummyType())
+            : base(range, new MidDummyType())
         {
             _var = var;
             _exp = exp;

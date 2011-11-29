@@ -82,9 +82,19 @@ namespace Spark.Mid
 
         public void TrySetName( Identifier name, SourceRange range )
         {
-            if( _name is UniqueIdentifier )
+            if (_name is UniqueIdentifier)
             {
                 _name = name;
+            }
+
+            TrySetRange(range);
+        }
+
+        public void TrySetRange(SourceRange range)
+        {
+            if (_range.fileName == null
+                || (_range.fileName == "Standard Library" && range.fileName != "Standard Library"))
+            {
                 _range = range;
             }
         }

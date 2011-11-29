@@ -4501,13 +4501,25 @@ namespace Spark.Resolve
             {
                 return (T)(object)ResErrorTerm.Instance;
             }
-            else if (coerced.Length != 1)
+            else if (coerced.Length == 1)
             {
-                env.Error(term.Range, message);
-                return (T)(object)ResErrorTerm.Instance;
+                return coerced[0];
+            }
+            else if (coerced.Length == 0)
+            {
+                env.Error(
+                    term.Range,
+                    message);
+            }
+            else if (coerced.Length > 1 )
+            {
+                env.Error(
+                    term.Range,
+                    "Ambiguous reference to {0}", coerced[0]);
+
             }
 
-            return coerced[0];
+            return (T)(object)ResErrorTerm.Instance;
         }
 
         private IEnumerable<T> CoerceFilter<T>(

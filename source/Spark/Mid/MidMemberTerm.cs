@@ -63,15 +63,19 @@ namespace Spark.Mid
     public interface IMidMemberRef
     {
         IMidMemberRef GenericApp(IEnumerable<object> args);
-        MidExp App(IEnumerable<MidVal> args);
-
+        MidExp App(
+            SourceRange range,
+            IEnumerable<MidVal> args);
         MidMemberDecl LookupMemberDecl(Spark.ResolvedSyntax.IResMemberDecl resMemberDecl);
     }
 
     public class MidMemberRef : IMidMemberRef
     {
         public virtual IMidMemberRef GenericApp(IEnumerable<object> args) { throw new NotImplementedException(); }
-        public virtual MidExp App(IEnumerable<MidVal> args) { throw new NotImplementedException(); }
+        public virtual MidExp App(
+            SourceRange range,
+            IEnumerable<MidVal> args)
+        { throw new NotImplementedException(); }
         public virtual MidMemberDecl LookupMemberDecl(Spark.ResolvedSyntax.IResMemberDecl resMemberDecl) { throw new NotImplementedException(); }
     }
 }
