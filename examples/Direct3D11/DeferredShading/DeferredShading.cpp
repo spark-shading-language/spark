@@ -71,8 +71,8 @@ ID3D11DepthStencilState* mLessThanStencilState;
 
 // DS
 bool gUseDeferred  = false;
-bool gUseSpotLight = false;
-bool gUseDirectionalLight = true;
+bool gUseSpotLight = true;
+bool gUseDirectionalLight = false;
 bool gShadow = false;
 bool gRotateSpotLight = false;
 bool gSetCameraAtSpotLightPos = false;
@@ -206,6 +206,9 @@ void SetIAState( ID3D11DeviceContext* pd3dImmediateContext );
 void UpdatePerObjectCBVS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, ID3D11DeviceContext* pd3dImmediateContext );
 void UpdatePerObjectCBPS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, 
     CModelViewerCamera * pLight, ID3D11DeviceContext* pd3dImmediateContext );
+void BindShadowMap( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot );
+void ResetState( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot, UINT numSlots);
+
 
 void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice )
 {
@@ -894,53 +897,46 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
         d3dDeviceContext->GSSetShader(0, 0, 0);
 
 
-        d3dDeviceContext->PSSetShaderResources(0, static_cast<UINT>(mGBufferSRV.size()), &mGBufferSRV.front());
+        BindShadowMap(d3dDeviceContext, 1);
+        d3dDeviceContext->PSSetShaderResources(2, static_cast<UINT>(mGBufferSRV.size()), &mGBufferSRV.front());
 
-        // Do pixel frequency shading
-            // Get the light direction
+        d3dDeviceContext->PSSetSamplers( 0, 1, &g_pSamLinear );
+        d3dDeviceContext->PSSetSamplers( 1, 1, &g_pSamPCF );
 
-        D3D11_MAPPED_SUBRESOURCE MappedResource;
-        D3DXVECTOR4 vSpotLightPosView;
-        D3DXVECTOR4 vSpotLightDirView;
-        SetSpotLigtParameters(&vSpotLightPosView, &vSpotLightDirView);
-
-
-        d3dDeviceContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource );
-        CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
-        D3DXMatrixTranspose( &pPerFrame->m_CameraProj, g_Camera.GetProjMatrix() );
-
-        pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
-        pPerFrame->m_SpotLightDir = vSpotLightDirView;
-        pPerFrame->m_SpotLightPos = vSpotLightPosView;
-        pPerFrame->m_SpotLightParameters = D3DXVECTOR4(g_SpotLightFOV * 0.5f, g_SpotLightAspect, g_SpotLight.GetNearClip(), g_SpotLight.GetFarClip());
-        pPerFrame->useSpotLight = gUseSpotLight;
-        pPerFrame->useDirectionalLight = gUseDirectionalLight;
-        pPerFrame->shadow = gShadow;
-        pPerFrame->shadowMapWidth = shadowMapWidth;
-        pPerFrame->shadowMapHeight = shadowMapHeight;
-        d3dDeviceContext->Unmap( g_pcbPSPerFrame, 0 );
-
-        d3dDeviceContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
+        UpdatePerFrameCB(d3dDeviceContext, vLightDir, fAmbient, &g_Camera);
+        UpdatePerObjectCBPS(&g_mCenterMesh, &g_Camera, &g_SpotLight, d3dDeviceContext);
 
         d3dDeviceContext->PSSetShader(gDirectionalLightPS, 0, 0);
-    //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
         d3dDeviceContext->Draw(3, 0);
+
         if (gUseSpotLight) {
             d3dDeviceContext->PSSetShader(gSpotLightPS, 0, 0);
-        //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
             d3dDeviceContext->Draw(3, 0);
         }
-
-        d3dDeviceContext->OMSetBlendState(NULL, 0, 0xFFFFFFFF);
-        d3dDeviceContext->OMSetDepthStencilState(NULL, 0);
+        ResetState(d3dDeviceContext, 0, 5);
     }
+}
 
-    ID3D11ShaderResourceView * pNullResources[4] = {NULL};
-    d3dDeviceContext->PSSetShaderResources(0, 4, pNullResources);
+void GenerateShadowMap( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice, ID3D11RenderTargetView* pRTV ) 
+{
+    float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
+    ID3D11RenderTargetView* pNullRTV[] = {NULL};
+    pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, mShadowMap->GetDepthStencil());
+    D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (shadowMapWidth), static_cast<FLOAT> (shadowMapHeight), 0.0f, 1.0f};
+    pd3dImmediateContext->RSSetViewports(1, &viewPort);
+
+    // Generate the shadow map.
+    pd3dImmediateContext->ClearDepthStencilView( mShadowMap->GetDepthStencil(), D3D11_CLEAR_DEPTH, 1.0, 0 );
+    RenderScene(pd3dImmediateContext, pRTV, mShadowMap->GetDepthStencil(), 
+        pd3dDevice, g_pVertexShader, NULL, gForwardSpark, &g_SpotLight, &g_SpotLight, &g_mCenterMesh);
+    pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, NULL);
 }
 
 void RenderDeferred( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice ) 
 {
+    ID3D11RenderTargetView* pRTV = DXUTGetD3D11RenderTargetView();
+    GenerateShadowMap(pd3dImmediateContext, pd3dDevice, pRTV);
     RenderGBuffer(pd3dImmediateContext, pd3dDevice);
     RenderDeferredLighting(pd3dImmediateContext, pd3dDevice);
 }
@@ -968,6 +964,7 @@ void CALLBACK OnD3D11FrameRender( ID3D11Device* pd3dDevice, ID3D11DeviceContext*
         D3DXVECTOR3 vecAt ( 0.0f, 0.0f, -0.0f );
         g_Camera.SetViewParams(&gSpotLightPos, &vecAt);
     }
+
     if (gUseDeferred) {
         RenderDeferred(pd3dImmediateContext, pd3dDevice);
     } else {
@@ -1031,6 +1028,9 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
 }
 
 
+
+
+
 void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice )
 {
     ID3D11RenderTargetView* pRTV = DXUTGetD3D11RenderTargetView();
@@ -1038,28 +1038,14 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
     if (gUseSpark) {
         gForwardSpark->SetMyTarget( pRTV );
     }
+    GenerateShadowMap(pd3dImmediateContext, pd3dDevice, pRTV);
     float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
-    ID3D11RenderTargetView* pNullRTV[] = {NULL};
-    pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, mShadowMap->GetDepthStencil());
-    D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (shadowMapWidth), static_cast<FLOAT> (shadowMapHeight), 0.0f, 1.0f};
-    pd3dImmediateContext->RSSetViewports(1, &viewPort);
-
-    // Generate the shadow map.
-    pd3dImmediateContext->ClearDepthStencilView( mShadowMap->GetDepthStencil(), D3D11_CLEAR_DEPTH, 1.0, 0 );
-    RenderScene(pd3dImmediateContext, pRTV, mShadowMap->GetDepthStencil(), 
-        pd3dDevice, g_pVertexShader, NULL, gForwardSpark, &g_SpotLight, &g_SpotLight, &g_mCenterMesh);
-
-    pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, NULL);
-
-    pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
     pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
-    viewPort.Width = static_cast<FLOAT> (mGBufferWidth);
-    viewPort.Height = static_cast<FLOAT> (mGBufferHeight);
+    D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (mGBufferWidth) ,static_cast<FLOAT> (mGBufferHeight) , 0.0f, 1.0f};
     pd3dImmediateContext->RSSetViewports(1, &viewPort);
 
-    auto shadowMapRSV = mShadowMap->GetShaderResource();
-    pd3dImmediateContext->PSSetShaderResources( 1, 1, &shadowMapRSV );
+    BindShadowMap(pd3dImmediateContext, 1);
 
     ID3D11PixelShader * pPS = NULL;
     for (UINT light = 0; light < 1U + gUseSpotLight; ++light)
@@ -1077,11 +1063,7 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
             pPS, gForwardSpark, &g_Camera, &g_SpotLight, &g_mCenterMesh);
     }
 
-    pd3dImmediateContext->OMSetBlendState(NULL, NULL, 0xFFFFFFFF);
-    pd3dImmediateContext->OMSetDepthStencilState(NULL, 0);
-    ID3D11ShaderResourceView * nullSRV[] = {NULL};
-    pd3dImmediateContext->PSSetShaderResources( 1, 1, nullSRV );
-
+    ResetState(pd3dImmediateContext, 1, 1);
 }
 
 
@@ -1337,5 +1319,17 @@ void UpdatePerObjectCBPS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera,
     pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
 }
 
+void BindShadowMap( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot )
+{
+    auto shadowMapRSV = mShadowMap->GetShaderResource();
+    pd3dImmediateContext->PSSetShaderResources( startSlot, 1, &shadowMapRSV );
+}
 
-
+void ResetState( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot, UINT numSlots )
+{
+    pd3dImmediateContext->OMSetBlendState(NULL, NULL, 0xFFFFFFFF);
+    pd3dImmediateContext->OMSetDepthStencilState(NULL, 0);
+    const UINT numMaxSlots = 8;
+    ID3D11ShaderResourceView * nullSRV[numMaxSlots] = {NULL};
+    pd3dImmediateContext->PSSetShaderResources( startSlot, numSlots, nullSRV );
+}

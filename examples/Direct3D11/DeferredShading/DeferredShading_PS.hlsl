@@ -143,20 +143,20 @@ float4 PSMainSpotLight( PS_INPUT Input ) : SV_TARGET
 //    float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
 //    fLighting = max( fLighting, g_fAmbient );
 //    return shadow * float4(xy.x, xy.y, 0.0, 1.0f);
-    return shadow * ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), Input.vPositionView, Input.vNormal);
+    return shadow * ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), Input.vPositionView, normalize(Input.vNormal));
 }
 
 //--------------------------------------------------------------------------------------
 // GBuffer and related common utilities and structures
 struct GBuffer
 {
-    float4 normal_specular : SV_Target0;
-    float4 albedo : SV_Target1;
-    float2 positionZGrad : SV_Target2;
+    float4 normal_specular  : SV_Target0;
+    float4 albedo           : SV_Target1;
+    float2 positionZGrad    : SV_Target2;
 };
 
 // Above values PLUS depth buffer (last element)
-Texture2DMS<float4, 1> gGBufferTextures[4] : register(t0);
+Texture2DMS<float4, 1> gGBufferTextures[4] : register(t2);
 
 
 float2 EncodeSphereMap(float3 n)
@@ -174,7 +174,6 @@ float3 DecodeSphereMap(float2 e)
     n.z  = 3.0f - 8.0f * f;
     return n;
 }
-
 
 //--------------------------------------------------------------------------------------
 // G-buffer rendering
@@ -270,19 +269,33 @@ SurfaceData ComputeSurfaceDataFromGBufferSample(uint2 positionViewport, uint sam
 
 float4 DirectionalLightPS(FullScreenTriangleVSOut input) : SV_Target
 {
-    SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), 0);
-    float4 vDiffuse = surface.albedo;
+    if (gUseDirectionalLight) {
+        SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), 0);
+        float4 vDiffuse = surface.albedo;
         
-    float fLighting = saturate( dot( g_vLightDir, surface.normal) );
-    fLighting = max( fLighting, g_fAmbient );
-    return vDiffuse * fLighting;
+        float fLighting = saturate( dot( g_vLightDir, surface.normal) );
+        fLighting = max( fLighting, g_fAmbient );
+        return vDiffuse * fLighting;
+    } else {
+        return float4(0, 0, 0, 1.0f);
+    }
 }
-
-
 
 
 float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
 {
+
     SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), 0);
-    return ComputeSpotLighting(/*surface.albedo*/float4(1.0f, 0.0f, 1.0f, 0.0f), surface.positionView, surface.normal);
+    surface.normal = normalize(surface.normal);
+    float shadow = 1.0f;
+    if (gShadow) {
+        float4 vPositionView = float4(surface.positionView, 1.0f);
+        float4 vPositionWorld = mul( vPositionView, g_viewInv );
+        float4 vPositionSM = mul(vPositionWorld, g_LightViewProj);
+        float3 ndc = vPositionSM.xyz/vPositionSM.w; 
+        float2 xy = (ndc.xy + float2(1.0f, 1.0f)) * 0.5f;
+        xy.y = 1.0f - xy.y;
+        shadow = g_ShadowMap.SampleCmpLevelZero(g_samPCF, xy, ndc.z);
+    }     
+    return shadow * ComputeSpotLighting(/*surface.albedo*/float4(1.0f, 0.0f, 1.0f, 0.0f), surface.positionView, surface.normal);
 }
