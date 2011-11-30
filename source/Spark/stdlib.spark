@@ -814,7 +814,16 @@ abstract shader class D3D11DrawPass
 	[[Builtin("hlsl", "sqrt({0})")]]
 	float sqrt( float value );
 
-	[[Builtin("hlsl", "pow({0}, {1})")]]
+	[[Builtin("hlsl", "sin({0})")]]
+	float sin( float value );
+
+    [[Builtin("hlsl", "cos({0})")]]
+	float cos( float value );
+
+    [[Builtin("hlsl", "smoothstep({0}, {1}, {2})")]]
+	float smoothstep( float low, float high, float value);
+
+    [[Builtin("hlsl", "pow({0}, {1})")]]
 	float3 pow( float3 base, float exponent );
 
     [[Builtin("hlsl", "ddx_coarse({0})")]]
