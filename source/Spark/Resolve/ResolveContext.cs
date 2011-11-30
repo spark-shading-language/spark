@@ -5765,7 +5765,7 @@ namespace Spark.Resolve
             // \todo: Must CoerceUnqualified to
             // the appropriate type frequency-qualified
             // for the present method...
-            var resCondition = Coerce(
+            var resCondition = CoerceUnqualified(
                 ResolveTerm(absStmt.Condition, env),
                 _builtinTypeBool(absStmt.Range),
                 env);

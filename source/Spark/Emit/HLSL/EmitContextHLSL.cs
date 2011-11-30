@@ -1551,6 +1551,15 @@ namespace Spark.Emit.HLSL
         }
 
         public void PreEmitExpImpl(
+            MidIfExp exp,
+            Span span)
+        {
+            PreEmitExp(exp.Condition, span);
+            PreEmitExp(exp.Then, span);
+            PreEmitExp(exp.Else, span);
+        }
+
+        public void PreEmitExpImpl(
             MidElementCtorApp app,
             Span span)
         {
