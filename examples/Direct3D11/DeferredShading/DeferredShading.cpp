@@ -1068,6 +1068,11 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
     for (UINT light = 0; light < 1U + gUseSpotLight; ++light)
     {
         if (light == 0) {
+            // Hack. because control flows don't seem to be working inside Spark.
+            // Also float4 * uint doesn't seem to be working.
+            if (!gUseDirectionalLight)
+                continue; 
+
             pPS = gForwardPS;
             pSparkShader = gForwardSpark;
             gForwardSpark->SetMyTarget( pRTV );
@@ -1140,6 +1145,7 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
     sparkShader->SetLightDir( Convert(vLightDir) );
     sparkShader->SetAmbient( fAmbient );
     sparkShader->SetLinearSampler( g_pSamLinear );
+    sparkShader->SetPcfSampler( g_pSamPCF );
 
     // Set up the vertex stream
     ID3D11Buffer* vb = g_Mesh11.GetVB11( 0, 0 );
@@ -1179,6 +1185,7 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
         ID3D11ShaderResourceView* diffuseTexture =
             g_Mesh11.GetMaterial( pSubset->MaterialID )->pDiffuseRV11;
         sparkShader->SetDiffuseTexture( diffuseTexture );
+        sparkShader->SetShadowMap( mShadowMap->GetShaderResource() );
 
         // Submit a rendering operation using this configuration
         sparkShader->Submit( pd3dDevice, pd3dImmediateContext );
@@ -1356,6 +1363,11 @@ void UpdatePerObjectCBPS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera,
     pd3dImmediateContext->Unmap( g_pcbPSPerObject, 0 );
 
     pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
+
+    if (gUseSpark) {
+        gForwardSpotLightSpark->SetG_viewInv(Convert(pPSPerObject->m_ViewInv));
+        gForwardSpotLightSpark->SetG_LightViewProj(Convert(pPSPerObject->m_LightViewProj));
+    }
 }
 
 void BindShadowMap( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot )

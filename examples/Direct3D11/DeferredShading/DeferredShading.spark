@@ -51,6 +51,11 @@ abstract shader class Base extends D3D11DrawPass
     input @Uniform float        gShadowMapHeight    ;
     input @Uniform uint         gUseDirectionalLight;
 
+//  Shadowmap related things.
+    input @Uniform float4x4     g_viewInv;
+    input @Uniform float4x4     g_LightViewProj;
+    input @Uniform Texture2D[float]  shadowMap;
+    input @Uniform SamplerComparisonState      pcfSampler;
 }
 
 abstract mixin shader class SurfaceAttributes extends D3D11DrawPass
@@ -99,15 +104,21 @@ abstract mixin shader class GenerateSurfaceAttributes
 abstract mixin shader class DirectionalLight
     extends Base, SurfaceAttributes
 {
+    @Fragment float4 GetColor(@Fragment float4 color) {
+        if (gUseDirectionalLight == 1) {
+                return color;
+        } 
+        return float4(0, 0, 0, 1);
+    }
 
     //@Fragment float4 color = float4(normal, 1.0f);
     // @Pixel
     //
     @Fragment float4 diffuse  = albedo;
     @Fragment float  lighting = max(saturate(dot(lightDir, normal)), ambient);
-    @Fragment float4 color    = diffuse * lighting ;
+    @Fragment float4 color    = diffuse * lighting /** gUseDirectionalLight */;
 
-    output @Pixel float4 myTarget = color;
+    output @Pixel float4 myTarget = color ;
 }
 
 
@@ -136,16 +147,31 @@ abstract mixin shader class SpotLight
         return atten * intensity *  vDiffuse * fLighting;
     }
 
+    @Fragment float Visibility(@Fragment float3 posView)
+    {
+        float vis = float(1);
+//        if (gShadow == 1 ) {
+            float4 vPositionView = float4(posView, 1.0f);
+            float4 vPositionWorld = mul( vPositionView, g_viewInv );
+            float4 vPositionSM = mul(vPositionWorld, g_LightViewProj);
+            float3 ndc = vPositionSM.xyz/vPositionSM.w; 
+            float2 xy = (ndc.xy + float2(1.0f, 1.0f)) * 0.5f;
+            xy.y = 1.0f - xy.y;
+            vis = SampleCmpLevelZero(shadowMap, pcfSampler, xy, ndc.z);
+//        }
+        return vis ;
+    }
+
+
     //@Fragment float4 color = float4(normal, 1.0f);
     // @Pixel
     //
-    @Fragment float vis = 1.0f;
+    @Fragment float vis = Visibility(positionView);
     @Fragment float4  lighting = ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), positionView, normal);
     @Fragment float4 color    = vis * lighting ;
 
     output @Pixel float4 myTarget = color + (myTarget @ OM_Dest) ;
     override OM_DepthStencilState = myDepthStencilState;
-
 }
 
 
