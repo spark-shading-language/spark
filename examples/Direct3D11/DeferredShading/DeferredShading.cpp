@@ -939,6 +939,8 @@ void GenerateShadowMap( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device*
 
     if (gUseSpark) {
         gForwardSpotLightSpark->SetMyTarget( NULL );
+        gForwardSpotLightSpark->SetShadowMap( NULL );
+        gForwardSpotLightSpark->SetMyDepthStencilState( NULL );
     }
 
     // Generate the shadow map.
@@ -1080,6 +1082,7 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
         else {
             if (gUseSpark) {
                 gForwardSpotLightSpark->SetMyDepthStencilState(mEqualStencilState);
+                gForwardSpotLightSpark->SetShadowMap( mShadowMap->GetShaderResource() );
             } else {
                 pd3dImmediateContext->OMSetBlendState(mLightingBlendState, 0, 0xFFFFFFFF);
                 pd3dImmediateContext->OMSetDepthStencilState(mEqualStencilState, 0);
@@ -1185,7 +1188,6 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
         ID3D11ShaderResourceView* diffuseTexture =
             g_Mesh11.GetMaterial( pSubset->MaterialID )->pDiffuseRV11;
         sparkShader->SetDiffuseTexture( diffuseTexture );
-        sparkShader->SetShadowMap( mShadowMap->GetShaderResource() );
 
         // Submit a rendering operation using this configuration
         sparkShader->Submit( pd3dDevice, pd3dImmediateContext );
@@ -1361,12 +1363,11 @@ void UpdatePerObjectCBPS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera,
 //    pPSPerObject->m_LightViewProj = mLightViewProj;
     pPSPerObject->m_vObjectColor = D3DXVECTOR4( 1, 1, 1, 1 );
     pd3dImmediateContext->Unmap( g_pcbPSPerObject, 0 );
-
     pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
 
     if (gUseSpark) {
-        gForwardSpotLightSpark->SetG_viewInv(Convert(pPSPerObject->m_ViewInv));
-        gForwardSpotLightSpark->SetG_LightViewProj(Convert(pPSPerObject->m_LightViewProj));
+        gForwardSpotLightSpark->SetG_viewInv(Convert(mViewInv));
+        gForwardSpotLightSpark->SetG_LightViewProj(Convert(mLightViewProj));
     }
 }
 
@@ -1374,6 +1375,7 @@ void BindShadowMap( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot )
 {
     auto shadowMapRSV = mShadowMap->GetShaderResource();
     pd3dImmediateContext->PSSetShaderResources( startSlot, 1, &shadowMapRSV );
+
 }
 
 void ResetState( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot, UINT numSlots )
