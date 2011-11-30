@@ -150,7 +150,7 @@ abstract mixin shader class SpotLight
     @Fragment float Visibility(@Fragment float3 posView)
     {
         float vis = float(1);
-//        if (gShadow == 1 ) {
+        if (gShadow == 1 ) {
             float4 vPositionView = float4(posView, 1.0f);
             float4 vPositionWorld = mul( vPositionView, g_viewInv );
             float4 vPositionSM = mul(vPositionWorld, g_LightViewProj);
@@ -158,7 +158,7 @@ abstract mixin shader class SpotLight
             float2 xy_old = (ndc.xy + float2(1.0f, 1.0f)) * 0.5f;
             float2 xy = float2(xy_old.x, 1.0f - xy_old.y);
             vis = SampleCmpLevelZero(shadowMap, pcfSampler, xy, ndc.z);
-//        }
+        }
         return vis ;
     }
 
