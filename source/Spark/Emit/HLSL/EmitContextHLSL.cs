@@ -654,7 +654,12 @@ namespace Spark.Emit.HLSL
         {
             switch (builtin.Name)
             {
+                case "uint": return 1;
+                case "uint2": return 1;
+                case "uint3": return 1;
+                case "uint4": return 1;
                 case "float": return 1;
+                case "float2": return 1;
                 case "float3": return 1;
                 case "float4": return 1;
                 case "float4x4": return 4;
