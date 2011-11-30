@@ -178,6 +178,20 @@ abstract mixin shader class SpotLight
 shader class ForwardSpotLight extends GenerateSurfaceAttributes, SpotLight
 {}
 
+shader class GenShadowMap extends Base
+{
+    @Uniform float4x4 worldview = mul(world, view);
+    @Uniform float4x4 viewProj      = mul( view, proj );
+    @Uniform float4x4 worldViewProj = mul( world, viewProj );
+
+    @AssembledVertex PNU    fetched  = myVertexStream( IA_VertexID );
+    @AssembledVertex float3 P_model  = fetched.position;
+
+    override IA_DrawSpan = myDrawSpan;
+    override RS_Position = mul(float4(P_model, 1.0f), worldViewProj);
+}
+
+
 
 abstract mixin shader class PackGBuffer
     extends Base, SurfaceAttributes

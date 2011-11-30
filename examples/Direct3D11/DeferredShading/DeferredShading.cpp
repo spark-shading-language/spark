@@ -100,7 +100,7 @@ Forward* gForwardSpark = nullptr;
 ForwardSpotLight* gForwardSpotLightSpark = nullptr;
 GenerateGBuffer* gGenerateGBufferSpark= nullptr;
 DirectionalLightGBuffer * gDirectionalLightGBuffer = nullptr;
-
+GenShadowMap * gGenShadowMapSpark = nullptr;
 
 struct CB_VS_PER_OBJECT
 {
@@ -738,7 +738,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     gForwardSpotLightSpark = gSparkContext->CreateShaderInstance<ForwardSpotLight>(pd3dDevice);
     gGenerateGBufferSpark = gSparkContext->CreateShaderInstance<GenerateGBuffer>( pd3dDevice );
     gDirectionalLightGBuffer = gSparkContext->CreateShaderInstance<DirectionalLightGBuffer>( pd3dDevice);
-
+    gGenShadowMapSpark = gSparkContext->CreateShaderInstance<GenShadowMap>( pd3dDevice );
 
     // Shadow map related resources
     mShadowMap = std::tr1::shared_ptr<Depth2D>(new Depth2D(
@@ -937,16 +937,10 @@ void GenerateShadowMap( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device*
     D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (shadowMapWidth), static_cast<FLOAT> (shadowMapHeight), 0.0f, 1.0f};
     pd3dImmediateContext->RSSetViewports(1, &viewPort);
 
-    if (gUseSpark) {
-        gForwardSpotLightSpark->SetMyTarget( NULL );
-        gForwardSpotLightSpark->SetShadowMap( NULL );
-        gForwardSpotLightSpark->SetMyDepthStencilState( NULL );
-    }
-
     // Generate the shadow map.
     pd3dImmediateContext->ClearDepthStencilView( mShadowMap->GetDepthStencil(), D3D11_CLEAR_DEPTH, 1.0, 0 );
     RenderScene(pd3dImmediateContext, pRTV, mShadowMap->GetDepthStencil(), 
-        pd3dDevice, g_pVertexShader, NULL, gForwardSpotLightSpark, &g_SpotLight, &g_SpotLight, &g_mCenterMesh);
+        pd3dDevice, g_pVertexShader, NULL, gGenShadowMapSpark, &g_SpotLight, &g_SpotLight, &g_mCenterMesh);
     pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, NULL);
 }
 
@@ -1043,6 +1037,7 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
     SAFE_RELEASE( gForwardSpotLightSpark );
     SAFE_RELEASE( gGenerateGBufferSpark);
     SAFE_RELEASE( gDirectionalLightGBuffer );
+    SAFE_RELEASE( gGenShadowMapSpark );
 }
 
 
