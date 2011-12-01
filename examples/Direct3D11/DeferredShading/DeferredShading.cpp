@@ -74,9 +74,9 @@ ID3D11DepthStencilState* mLessThanStencilState;
 
 
 // DS
-bool gUseDeferred  = false;
-bool gUseSpotLight = true;
-bool gUseDirectionalLight = false;
+bool gUseDeferred  = true;
+bool gUseSpotLight = false;
+bool gUseDirectionalLight = true;
 bool gShadow = false;
 bool gRotateSpotLight = false;
 bool gSetCameraAtSpotLightPos = false;
@@ -229,6 +229,8 @@ void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice
     d3dDeviceContext->ClearRenderTargetView(mGBufferRTV[0], clearColor);
     d3dDeviceContext->ClearRenderTargetView(mGBufferRTV[1], clearColor);
     d3dDeviceContext->ClearRenderTargetView(mGBufferRTV[2], clearColor);
+    D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (mGBufferWidth), static_cast<FLOAT> (mGBufferHeight), 0.0f, 1.0f};
+    d3dDeviceContext->RSSetViewports(1, &viewPort);
 
 
     if (gUseSpark) {
@@ -238,8 +240,6 @@ void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice
     }
     else {
         d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), &mGBufferRTV.front(), mDepthBuffer->GetDepthStencil());
-        D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (mGBufferWidth), static_cast<FLOAT> (mGBufferHeight), 0.0f, 1.0f};
-        d3dDeviceContext->RSSetViewports(1, &viewPort);
     }
 
     RenderScene(d3dDeviceContext, NULL, mDepthBuffer->GetDepthStencil(), pDevice, 
@@ -809,7 +809,6 @@ HRESULT CALLBACK OnD3D11ResizedSwapChain( ID3D11Device* pd3dDevice, IDXGISwapCha
     mDepthBuffer = std::tr1::shared_ptr<Depth2D>(new Depth2D(
         pd3dDevice, mGBufferWidth, mGBufferHeight,
         D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE,
-        sampleDesc,
         false// Include stencil if using MSAA
         ));
 
@@ -825,20 +824,20 @@ HRESULT CALLBACK OnD3D11ResizedSwapChain( ID3D11Device* pd3dDevice, IDXGISwapCha
     // normal_specular
     mGBuffer.push_back(std::tr1::shared_ptr<Texture2D>(new Texture2D(
         pd3dDevice, mGBufferWidth, mGBufferHeight, DXGI_FORMAT_R16G16B16A16_FLOAT,
-        D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE,
-        sampleDesc)));
+        D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE
+        )));
 
     // albedo
     mGBuffer.push_back(std::tr1::shared_ptr<Texture2D>(new Texture2D(
         pd3dDevice, mGBufferWidth, mGBufferHeight, DXGI_FORMAT_R8G8B8A8_UNORM,
-        D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE,
-        sampleDesc)));
+        D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE
+        )));
 
     // positionZgrad
     mGBuffer.push_back(std::tr1::shared_ptr<Texture2D>(new Texture2D(
         pd3dDevice, mGBufferWidth, mGBufferHeight, DXGI_FORMAT_R16G16_FLOAT,
-        D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE,
-        sampleDesc)));
+        D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE
+        )));
 
     // Set up GBuffer resource list
     mGBufferRTV.resize(mGBuffer.size(), 0);
@@ -896,6 +895,8 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
         gDirectionalLightGBuffer->SetDepthStencilView( pDSV );
         gDirectionalLightGBuffer->SetAmbient(fAmbient);
         gDirectionalLightGBuffer->SetLightDir(Convert(vLightDir));
+        gDirectionalLightGBuffer->SetShadowMap( mShadowMap->GetShaderResource() );
+        UpdatePerFrameCB(d3dDeviceContext, vLightDir, fAmbient, &g_Camera, gDirectionalLightGBuffer);
         gDirectionalLightGBuffer->Submit(pd3dDevice, d3dDeviceContext); 
     } else {
         float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -934,10 +935,8 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
         }
         ResetState(d3dDeviceContext, 0, 5);
 //        d3dDeviceContext->OMSetRenderTargets(0, gNullRTV, NULL);
-        if (!gUseSpark) {
-            d3dDeviceContext->PSSetShaderResources(2, static_cast<UINT>(mGBufferSRV.size()), gNullSRV);
-        }
     }
+    d3dDeviceContext->PSSetShaderResources(0, gNumMaxSlots, gNullSRV);
 }
 
 void GenerateShadowMap( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice, ID3D11RenderTargetView* pRTV ) 

@@ -116,7 +116,11 @@ abstract mixin shader class DirectionalLight
     //
     @Fragment float4 diffuse  = albedo;
     @Fragment float  lighting = max(saturate(dot(lightDir, normal)), ambient);
-    @Fragment float4 color    = diffuse * lighting /** gUseDirectionalLight */;
+    @Fragment float4 tmp_color    = diffuse * lighting ;
+    // The following line works
+     @Fragment float4 color = tmp_color * gUseDirectionalLight;
+    // but the next one doesn't
+//    @Fragment float4 color = GetColor(tmp_color);
 
     output @Pixel float4 myTarget = color ;
 }

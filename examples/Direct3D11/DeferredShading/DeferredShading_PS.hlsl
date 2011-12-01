@@ -161,7 +161,7 @@ struct GBuffer
 };
 
 // Above values PLUS depth buffer (last element)
-Texture2DMS<float4, 1> gGBufferTextures[4] : register(t2);
+Texture2D<float4> gGBufferTextures[4] : register(t2);
 
 
 float2 EncodeSphereMap(float3 n)
@@ -232,15 +232,15 @@ SurfaceData ComputeSurfaceDataFromGBufferSample(uint2 positionViewport, uint sam
 {
     // Load the raw data from the GBuffer
     GBuffer rawData;
-    rawData.normal_specular = gGBufferTextures[0].Load(positionViewport.xy, sampleIndex).xyzw;
-    rawData.albedo = gGBufferTextures[1].Load(positionViewport.xy, sampleIndex).xyzw;
-    rawData.positionZGrad = gGBufferTextures[2].Load(positionViewport.xy, sampleIndex).xy;
-    float zBuffer = gGBufferTextures[3].Load(positionViewport.xy, sampleIndex).x;
+    rawData.normal_specular = gGBufferTextures[0].Load(uint3(positionViewport.xy, 0)).xyzw;
+    rawData.albedo = gGBufferTextures[1].Load(uint3(positionViewport.xy, 0)).xyzw;
+    rawData.positionZGrad = gGBufferTextures[2].Load(uint3(positionViewport.xy, 0)).xy;
+    float zBuffer = gGBufferTextures[3].Load(uint3(positionViewport.xy, 0)).x;
 
 
     float2 gbufferDim;
     uint dummy;
-    gGBufferTextures[0].GetDimensions(gbufferDim.x, gbufferDim.y, dummy);
+    gGBufferTextures[0].GetDimensions(gbufferDim.x, gbufferDim.y);
     
     // Compute screen/clip-space position and neighbour positions
     // NOTE: Mind DX11 viewport transform and pixel center!
