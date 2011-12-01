@@ -1391,6 +1391,25 @@ namespace Spark.Resolve
                             absAttribute.Range,
                             "No matching declaration of '{0}' found to override",
                             absAttribute.Name);
+
+                        // Create a "fake" member line decl to keep things
+                        // moving...
+                        var nameGroup = new ResMemberNameGroupBuilder(
+                            LazyFactory,
+                            null,
+                            absAttribute.Name);
+                        var categoryGroup = new ResMemberCategoryGroupBuilder(
+                            null,
+                            nameGroup,
+                            category);
+                        var resLine = new ResMemberLineDeclBuilder(
+                            categoryGroup,
+                            LazyFactory,
+                            absAttribute.Name,
+                            new ResLexicalID(),
+                            category);
+                        nameGroup.DoneBuilding();
+                        return resLine;
                     }
                 }
             }
