@@ -23,6 +23,10 @@
 #include <random>
 #include <algorithm>
 
+const UINT gNumMaxSlots = 8;
+ID3D11RenderTargetView* gNullRTV[gNumMaxSlots] = {NULL};
+ID3D11ShaderResourceView * gNullSRV[gNumMaxSlots] = {NULL};
+
 
 //--------------------------------------------------------------------------------------
 // Global variables
@@ -240,6 +244,10 @@ void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice
 
     RenderScene(d3dDeviceContext, NULL, mDepthBuffer->GetDepthStencil(), pDevice, 
         g_pVertexShader, gGBufferPS, gGenerateGBufferSpark, &g_Camera, &g_SpotLight, &g_mCenterMesh);
+
+    if (!gUseSpark) {
+        d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), gNullRTV, NULL);
+    }
 
 }
 
@@ -925,6 +933,10 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
             d3dDeviceContext->Draw(3, 0);
         }
         ResetState(d3dDeviceContext, 0, 5);
+//        d3dDeviceContext->OMSetRenderTargets(0, gNullRTV, NULL);
+        if (!gUseSpark) {
+            d3dDeviceContext->PSSetShaderResources(2, static_cast<UINT>(mGBufferSRV.size()), gNullSRV);
+        }
     }
 }
 
@@ -932,8 +944,7 @@ void GenerateShadowMap( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device*
 {
     float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
-    ID3D11RenderTargetView* pNullRTV[] = {NULL};
-    pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, mShadowMap->GetDepthStencil());
+    pd3dImmediateContext->OMSetRenderTargets(0, gNullRTV, mShadowMap->GetDepthStencil());
     D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (shadowMapWidth), static_cast<FLOAT> (shadowMapHeight), 0.0f, 1.0f};
     pd3dImmediateContext->RSSetViewports(1, &viewPort);
 
@@ -941,7 +952,7 @@ void GenerateShadowMap( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device*
     pd3dImmediateContext->ClearDepthStencilView( mShadowMap->GetDepthStencil(), D3D11_CLEAR_DEPTH, 1.0, 0 );
     RenderScene(pd3dImmediateContext, pRTV, mShadowMap->GetDepthStencil(), 
         pd3dDevice, g_pVertexShader, NULL, gGenShadowMapSpark, &g_SpotLight, &g_SpotLight, &g_mCenterMesh);
-    pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, NULL);
+    pd3dImmediateContext->OMSetRenderTargets(0, gNullRTV, NULL);
 }
 
 void RenderDeferred( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice ) 
@@ -1377,7 +1388,5 @@ void ResetState( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot, UINT
 {
     pd3dImmediateContext->OMSetBlendState(NULL, NULL, 0xFFFFFFFF);
     pd3dImmediateContext->OMSetDepthStencilState(NULL, 0);
-    const UINT numMaxSlots = 8;
-    ID3D11ShaderResourceView * nullSRV[numMaxSlots] = {NULL};
-    pd3dImmediateContext->PSSetShaderResources( startSlot, numSlots, nullSRV );
+    pd3dImmediateContext->PSSetShaderResources( startSlot, numSlots, gNullSRV );
 }
