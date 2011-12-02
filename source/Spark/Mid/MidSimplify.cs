@@ -412,7 +412,7 @@ namespace Spark.Mid
                         labelExp.Range,
                         labelExp.Label,
                         letExp.Body,
-                        letExp.Type));
+                        labelExp.Type));
                 result = SimplifyExp(result, env);
                 return result;
             }

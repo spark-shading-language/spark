@@ -1449,6 +1449,14 @@ namespace Spark.Emit.HLSL
         }
 
         private void AssignImpl(
+            EmitValHLSL dest,
+            VoidValHLSL src,
+            Span span)
+        {
+        }
+
+
+        private void AssignImpl(
             SimpleValHLSL dest,
             SimpleValHLSL src,
             Span span)
@@ -1527,11 +1535,26 @@ namespace Spark.Emit.HLSL
         }
 
         public void PreEmitExpImpl(
+            MidLabelExp exp,
+            Span span)
+        {
+            PreEmitExp(exp.Body, span);
+        }
+
+
+        public void PreEmitExpImpl(
             MidLetExp exp,
             Span span)
         {
             PreEmitExp(exp.Exp, span);
             PreEmitExp(exp.Body, span);
+        }
+
+        public void PreEmitExpImpl(
+            MidBreakExp exp,
+            Span span)
+        {
+            PreEmitExp(exp.Value, span);
         }
 
         public void PreEmitExpImpl(
@@ -1742,7 +1765,39 @@ namespace Spark.Emit.HLSL
             private EmitValHLSL _resultVar;
         }
 
+        private class BreakLabel : Label
+        {
+            public BreakLabel(
+                MidLabel midLabel,
+                EmitContextHLSL context,
+                EmitValHLSL resultVar)
+            {
+                _midLabel = midLabel;
+                _context = context;
+                _resultVar = resultVar;
+            }
+
+            public override void Emit(
+                EmitValHLSL val,
+                Span span)
+            {
+                _context.Assign(
+                    _resultVar,
+                    val,
+                    span);
+                span.WriteLine("break;");
+            }
+
+            public MidLabel MidLabel { get { return _midLabel; } }
+
+            private MidLabel _midLabel;
+            private EmitContextHLSL _context;
+            private EmitValHLSL _resultVar;
+        }
+
         private Dictionary<MidLabel, Label> _labels = new Dictionary<MidLabel, Label>();
+
+        private Stack<Label> _nestedLabels = new Stack<Label>();
 
         private EmitValHLSL EmitExpImpl(MidBreakExp exp, Span span)
         {
@@ -1755,7 +1810,22 @@ namespace Spark.Emit.HLSL
                 return VoidVal;
             }
 
-            throw new NotImplementedException();
+            var topLabel = _nestedLabels.Peek();
+            if (topLabel is BreakLabel)
+            {
+                var breakLabel = (BreakLabel)topLabel;
+                if (breakLabel.MidLabel == exp.Label)
+                {
+                    breakLabel.Emit(value, span);
+                    return VoidVal;
+                }
+            }
+
+            Diagnostics.Add(
+                Severity.Error,
+                exp.Range,
+                "Control flow to complex for HLSL emit. Sorry.");
+            return new ErrorValHLSL();
         }
 
         private EmitValHLSL EmitExpImpl(MidLabelExp exp, Span span)
@@ -1765,11 +1835,38 @@ namespace Spark.Emit.HLSL
                 return EmitExp(exp.Body, span);
             }
 
-            Diagnostics.Add(
-                Severity.Error,
-                new SourceRange(),
-                "Control flow too complex for HLSL emit!");
-            return new ErrorValHLSL();
+            // Try to resolve this label with
+            // loop nesting...
+
+            var resultType = EmitType(exp.Type);
+            var resultVar = resultType.CreateVal("__block_result");
+            DeclareLocal(resultVar, span);
+
+            Label newLabel = new BreakLabel(
+                exp.Label,
+                this,
+                resultVar);
+
+            _nestedLabels.Push(newLabel);
+            try
+            {
+                span.WriteLine("do {");
+
+                var innerSpan = span.IndentSpan();
+
+                var bodyVal = EmitExp(exp.Body, innerSpan);
+                if (bodyVal != null)
+                {
+                    Assign(resultVar, bodyVal, innerSpan);
+                }
+
+                span.WriteLine("} while(false);");
+            }
+            finally
+            {
+                _nestedLabels.Pop();
+            }
+            return resultVar;
         }
 
         private EmitValHLSL EmitExpImpl(MidAssignExp exp, Span span)
@@ -2387,6 +2484,13 @@ namespace Spark.Emit.HLSL
                 (dynamic)val,
                 span);
         }
+
+        private void DeclareLocalImpl(
+            VoidValHLSL val,
+            Span span)
+        {
+        }
+
 
         private void DeclareLocalImpl(
             SimpleValHLSL val,
