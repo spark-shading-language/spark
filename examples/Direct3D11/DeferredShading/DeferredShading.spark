@@ -100,9 +100,14 @@ abstract mixin shader class GenerateSurfaceAttributes
     override specularPower = 25.0f;
 }
 
+abstract mixin shader class Light
+    extends Base, SurfaceAttributes
+{
+    abstract output @Pixel float4 myTarget;
+}
 
 abstract mixin shader class DirectionalLight
-    extends Base, SurfaceAttributes
+    extends Base, SurfaceAttributes, Light
 {
     @Fragment float4 GetColor(@Fragment float4 color) {
         if (gUseDirectionalLight == 1) {
@@ -122,7 +127,7 @@ abstract mixin shader class DirectionalLight
     // but the next one doesn't
 //    @Fragment float4 color = GetColor(tmp_color);
 
-    output @Pixel float4 myTarget = color ;
+    override output @Pixel float4 myTarget = color ;
 }
 
 
@@ -130,7 +135,7 @@ shader class Forward extends GenerateSurfaceAttributes, DirectionalLight
 {}
 
 abstract mixin shader class SpotLight
-    extends Base, SurfaceAttributes
+    extends Base, SurfaceAttributes, Light
 {
     @Fragment float4 ComputeSpotLighting(@Fragment float4 vDiffuse, 
                                         @Fragment float3 positionView, 
@@ -174,7 +179,7 @@ abstract mixin shader class SpotLight
     @Fragment float4  lighting = ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), positionView, normal);
     @Fragment float4 color    = vis * lighting ;
 
-    output @Pixel float4 myTarget = color + (myTarget @ OM_Dest) ;
+    override output @Pixel float4 myTarget = color + (myTarget @ OM_Dest) ;
     override OM_DepthStencilState = myDepthStencilState;
 }
 
@@ -302,3 +307,5 @@ abstract mixin shader class FullScreenTriangle extends D3D11DrawPass
 shader class DirectionalLightGBuffer extends FullScreenTriangle, UnpackGBuffer, DirectionalLight
 {}
 
+shader class SpotLightGBuffer extends FullScreenTriangle, UnpackGBuffer, SpotLight
+{}

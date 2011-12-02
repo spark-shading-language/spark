@@ -75,8 +75,8 @@ ID3D11DepthStencilState* mLessThanStencilState;
 
 // DS
 bool gUseDeferred  = true;
-bool gUseSpotLight = false;
-bool gUseDirectionalLight = true;
+bool gUseSpotLight = true;
+bool gUseDirectionalLight = false;
 bool gShadow = false;
 bool gRotateSpotLight = false;
 bool gSetCameraAtSpotLightPos = false;
@@ -104,6 +104,7 @@ Forward* gForwardSpark = nullptr;
 ForwardSpotLight* gForwardSpotLightSpark = nullptr;
 GenerateGBuffer* gGenerateGBufferSpark= nullptr;
 DirectionalLightGBuffer * gDirectionalLightGBuffer = nullptr;
+SpotLightGBuffer* gSpotLightGBuffer = nullptr;
 GenShadowMap * gGenShadowMapSpark = nullptr;
 
 struct CB_VS_PER_OBJECT
@@ -213,10 +214,10 @@ void UpdatePerFrameCB(  ID3D11DeviceContext* pd3dImmediateContext,
 void SetIAState( ID3D11DeviceContext* pd3dImmediateContext );
 void UpdatePerObjectCBVS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, ID3D11DeviceContext* pd3dImmediateContext );
 void UpdatePerObjectCBPS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, 
-    CModelViewerCamera * pLight, ID3D11DeviceContext* pd3dImmediateContext );
+    CModelViewerCamera * pLight, ID3D11DeviceContext* pd3dImmediateContext, Base * sparkShader );
 void BindShadowMap( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot );
 void ResetState( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot, UINT numSlots);
-
+void UnpackGBufferParams(UnpackGBuffer * sparkShader);
 
 void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice )
 {
@@ -746,6 +747,7 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     gForwardSpotLightSpark = gSparkContext->CreateShaderInstance<ForwardSpotLight>(pd3dDevice);
     gGenerateGBufferSpark = gSparkContext->CreateShaderInstance<GenerateGBuffer>( pd3dDevice );
     gDirectionalLightGBuffer = gSparkContext->CreateShaderInstance<DirectionalLightGBuffer>( pd3dDevice);
+    gSpotLightGBuffer = gSparkContext->CreateShaderInstance<SpotLightGBuffer>( pd3dDevice);
     gGenShadowMapSpark = gSparkContext->CreateShaderInstance<GenShadowMap>( pd3dDevice );
 
     // Shadow map related resources
@@ -874,6 +876,8 @@ void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3
 
 void SetSpotLigtParameters( D3DXVECTOR4 * vSpotLightPosView, D3DXVECTOR4 * vSpotLightDirView );
 
+void SetLightParams( ID3D11RenderTargetView * pRTV, ID3D11DepthStencilView * pDSV, float fAmbient, D3DXVECTOR3 vLightDir, Light * sparkShader );
+
 void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device* pd3dDevice ) 
 {
     auto pDSV = DXUTGetD3D11DepthStencilView();
@@ -887,17 +891,24 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
     float fAmbient = 0.1f;
 
     if (gUseSpark) {
-        gDirectionalLightGBuffer->SetNormalSpecularTexture( mGBufferSRV[0] );
-        gDirectionalLightGBuffer->SetAlbedoTexture( mGBufferSRV[1] );
-        gDirectionalLightGBuffer->SetZGradTexture( mGBufferSRV[2] );
-        gDirectionalLightGBuffer->SetZBufferTexture( mGBufferSRV[3] );
-        gDirectionalLightGBuffer->SetMyTarget(pRTV);
-        gDirectionalLightGBuffer->SetDepthStencilView( pDSV );
-        gDirectionalLightGBuffer->SetAmbient(fAmbient);
-        gDirectionalLightGBuffer->SetLightDir(Convert(vLightDir));
-        gDirectionalLightGBuffer->SetShadowMap( mShadowMap->GetShaderResource() );
-        UpdatePerFrameCB(d3dDeviceContext, vLightDir, fAmbient, &g_Camera, gDirectionalLightGBuffer);
-        gDirectionalLightGBuffer->Submit(pd3dDevice, d3dDeviceContext); 
+
+        if (gUseDirectionalLight) {
+            UnpackGBufferParams(gDirectionalLightGBuffer->StaticCast<UnpackGBuffer>());
+            SetLightParams(pRTV, pDSV, fAmbient, vLightDir, gDirectionalLightGBuffer->StaticCast<Light>());
+            UpdatePerFrameCB(d3dDeviceContext, vLightDir, fAmbient, &g_Camera, gDirectionalLightGBuffer);
+            gDirectionalLightGBuffer->Submit(pd3dDevice, d3dDeviceContext); 
+        }
+
+        if (gUseSpotLight) {
+            UnpackGBufferParams(gSpotLightGBuffer->StaticCast<UnpackGBuffer>());
+            SetLightParams(pRTV, pDSV, fAmbient, vLightDir, gSpotLightGBuffer->StaticCast<Light>());
+            UpdatePerFrameCB(d3dDeviceContext, vLightDir, fAmbient, &g_Camera, gSpotLightGBuffer);
+            UpdatePerObjectCBPS(&g_mCenterMesh, &g_Camera, &g_SpotLight, d3dDeviceContext, gSpotLightGBuffer->StaticCast<Base>());
+            gSpotLightGBuffer->StaticCast<Base>()->SetPcfSampler(g_pSamPCF);
+            gSpotLightGBuffer->SetMyDepthStencilState(mEqualStencilState);
+            gSpotLightGBuffer->Submit(pd3dDevice, d3dDeviceContext); 
+        }
+
     } else {
         float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
         d3dDeviceContext->ClearRenderTargetView(pRTV, ClearColor );
@@ -924,7 +935,7 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
         d3dDeviceContext->PSSetSamplers( 1, 1, &g_pSamPCF );
 
         UpdatePerFrameCB(d3dDeviceContext, vLightDir, fAmbient, &g_Camera, gDirectionalLightGBuffer);
-        UpdatePerObjectCBPS(&g_mCenterMesh, &g_Camera, &g_SpotLight, d3dDeviceContext);
+        UpdatePerObjectCBPS(&g_mCenterMesh, &g_Camera, &g_SpotLight, d3dDeviceContext, gSpotLightGBuffer->StaticCast<Base>());
 
         d3dDeviceContext->PSSetShader(gDirectionalLightPS, 0, 0);
         d3dDeviceContext->Draw(3, 0);
@@ -1047,6 +1058,7 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
     SAFE_RELEASE( gForwardSpotLightSpark );
     SAFE_RELEASE( gGenerateGBufferSpark);
     SAFE_RELEASE( gDirectionalLightGBuffer );
+    SAFE_RELEASE( gSpotLightGBuffer );
     SAFE_RELEASE( gGenShadowMapSpark );
 }
 
@@ -1238,7 +1250,7 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     // Set the per object constant data
     UpdatePerObjectCBVS(mCenter, pCamera, pd3dImmediateContext);
     // PS Per object
-    UpdatePerObjectCBPS(mCenter, pCamera, pLight, pd3dImmediateContext);
+    UpdatePerObjectCBPS(mCenter, pCamera, pLight, pd3dImmediateContext, sparkShader);
 
     SetIAState(pd3dImmediateContext);
 
@@ -1292,6 +1304,7 @@ void UpdatePerFrameCB(  ID3D11DeviceContext* pd3dImmediateContext,
     pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
 
     if (gUseSpark) {
+        sparkShader->SetProj(Convert(*pCamera->GetProjMatrix()));
         sparkShader->SetG_SpotLightPosView(Convert(vSpotLightPosView));
         sparkShader->SetG_SpotLightDir(Convert(vSpotLightDirView));
         sparkShader->SetG_SpotLightParams(Convert(D3DXVECTOR4(g_SpotLightFOV * 0.5f, 
@@ -1343,7 +1356,7 @@ void UpdatePerObjectCBVS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera,
 }
 
 void UpdatePerObjectCBPS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, 
-    CModelViewerCamera * pLight, ID3D11DeviceContext* pd3dImmediateContext )
+    CModelViewerCamera * pLight, ID3D11DeviceContext* pd3dImmediateContext, Base * sparkShader )
 {
     HRESULT hr = S_OK;
     D3DXMATRIX mWorld, mView, mProj;
@@ -1371,8 +1384,8 @@ void UpdatePerObjectCBPS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera,
     pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
 
     if (gUseSpark) {
-        gForwardSpotLightSpark->SetG_viewInv(Convert(mViewInv));
-        gForwardSpotLightSpark->SetG_LightViewProj(Convert(mLightViewProj));
+        sparkShader->SetG_viewInv(Convert(mViewInv));
+        sparkShader->SetG_LightViewProj(Convert(mLightViewProj));
     }
 }
 
@@ -1388,4 +1401,21 @@ void ResetState( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot, UINT
     pd3dImmediateContext->OMSetBlendState(NULL, NULL, 0xFFFFFFFF);
     pd3dImmediateContext->OMSetDepthStencilState(NULL, 0);
     pd3dImmediateContext->PSSetShaderResources( startSlot, numSlots, gNullSRV );
+}
+
+void SetLightParams( ID3D11RenderTargetView * pRTV, ID3D11DepthStencilView * pDSV, float fAmbient, D3DXVECTOR3 vLightDir, Light * sparkShader )
+{
+    sparkShader->SetMyTarget(pRTV);
+    sparkShader->SetDepthStencilView( pDSV );
+    sparkShader->SetAmbient(fAmbient);
+    sparkShader->SetLightDir(Convert(vLightDir));
+    sparkShader->SetShadowMap( mShadowMap->GetShaderResource() );
+}
+
+void UnpackGBufferParams(UnpackGBuffer * sparkShader) 
+{
+    sparkShader->SetNormalSpecularTexture( mGBufferSRV[0] );
+    sparkShader->SetAlbedoTexture( mGBufferSRV[1] );
+    sparkShader->SetZGradTexture( mGBufferSRV[2] );
+    sparkShader->SetZBufferTexture( mGBufferSRV[3] );
 }
