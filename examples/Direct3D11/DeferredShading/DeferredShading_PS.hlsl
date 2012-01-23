@@ -6,12 +6,18 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 //--------------------------------------------------------------------------------------
 
+// Constants 
+
+#define D3DX_PI    3.141592654f
+
 //--------------------------------------------------------------------------------------
 // Globals
 //--------------------------------------------------------------------------------------
 cbuffer cbPerObject : register( b0 )
 {
-	float4		g_vObjectColor			: packoffset( c0 );
+    matrix      g_viewInv               : packoffset( c0);
+    matrix      g_LightViewProj         : packoffset( c4);
+	float4		g_vObjectColor			: packoffset( c8 );
 };
 
 cbuffer cbPerFrame : register( b1 )
@@ -19,23 +25,39 @@ cbuffer cbPerFrame : register( b1 )
     matrix      mCameraProj             : packoffset( c0);
 	float3		g_vLightDir				: packoffset( c4 );
 	float		g_fAmbient				: packoffset( c4.w );
+
+    float4      g_SpotLightPosView      : packoffset( c5 );
+    float4      g_SpotLightDir          : packoffset( c6 );
+    float4      g_SpotLightParams       : packoffset( c7 );
+
+    uint        gUseSpotLight           : packoffset( c8.x );
+    uint        gShadow                 : packoffset( c8.y );
+    float       gShadowMapWidth         : packoffset( c8.z );
+    float       gShadowMapHeight        : packoffset( c8.w );
+
+    uint        gUseDirectionalLight    : packoffset( c9.x );
+    uint        padding1                : packoffset( c9.y );
+    uint        padding2                : packoffset( c9.z );
+    uint        padding3                : packoffset( c9.w );
 };
 
 //--------------------------------------------------------------------------------------
 // Textures and Samplers
 //--------------------------------------------------------------------------------------
-Texture2D	g_txDiffuse : register( t0 );
-SamplerState g_samLinear : register( s0 );
+Texture2D	            g_txDiffuse : register( t0 );
+Texture2D<float>        g_ShadowMap : register (t1 ) ;
+SamplerState            g_samLinear : register( s0 );
+SamplerComparisonState  g_samPCF    : register( s1 );
 
 //--------------------------------------------------------------------------------------
 // Input / Output structures
 //--------------------------------------------------------------------------------------
 struct PS_INPUT
 {
-	float3 vViewVector  : VIEWVECTOR;
-    float3 vPositionView : POSITION_VIEW;
-	float3 vNormal		: NORMAL;
-	float2 vTexcoord	: TEXCOORD0;
+    float3 vViewVector      : VIEWVECTOR;
+    float3 vPositionView    : POSITION_VIEW;
+    float3 vNormal          : NORMAL;
+    float2 vTexcoord        : TEXCOORD0;
 };
 
 // Data that we can read or derive from the surface shader outputs
@@ -74,45 +96,72 @@ SurfaceData ComputeSurfaceDataFromGeometry(PS_INPUT input)
     return surface;
 }
 
+float4 ComputeSpotLighting(float4 vDiffuse, float3 positionView, float3 normalView)
+{
+    float d = distance(positionView, g_SpotLightPosView.xyz);
+    float3 lightDirView = normalize(g_SpotLightPosView.xyz - positionView);
+    float fLighting = saturate(dot(lightDirView, normalView));
+
+    float cosoutside = cos (g_SpotLightParams.x);
+    float cosinside = cos (g_SpotLightParams.x - D3DX_PI/36.0f);
+    float cosangle = saturate(dot(normalize(-g_SpotLightDir.xyz), lightDirView)) ;
+    float atten = pow(cosangle, 2.0f) / (d * d);
+    atten *= smoothstep(cosoutside, cosinside, cosangle);
+    const float intensity = 20000.0f;
+    return atten * intensity *  vDiffuse * fLighting;
+}
+
 //--------------------------------------------------------------------------------------
 // Pixel Shader
 //--------------------------------------------------------------------------------------
 float4 PSMain( PS_INPUT Input ) : SV_TARGET
 {
-	float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
-	
-	float fLighting = saturate( dot( g_vLightDir, Input.vNormal ) );
-	fLighting = max( fLighting, g_fAmbient );
-	return vDiffuse * fLighting;
+    if (gUseDirectionalLight) {
+        float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
+    
+        float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
+        fLighting = max( fLighting, g_fAmbient );
+        return vDiffuse * fLighting; 
+    } else 
+        return float4(0, 0, 0, 1);
+}
+float Visibility(float3 posView)
+{
+    float vis = 1.0f;
+    if (gShadow) {
+        float4 vPositionView = float4(posView, 1.0f);
+        float4 vPositionWorld = mul( vPositionView, g_viewInv );
+        float4 vPositionSM = mul(vPositionWorld, g_LightViewProj);
+        float3 ndc = vPositionSM.xyz/vPositionSM.w; 
+        float2 xy = (ndc.xy + float2(1.0f, 1.0f)) * 0.5f;
+        xy.y = 1.0f - xy.y;
+        vis = g_ShadowMap.SampleCmpLevelZero(g_samPCF, xy, ndc.z);
+    }
+    return vis;
+}
 
-//    float3 vView = normalize(Input.vViewVector);
-//    float3 vNormal = normalize(Input.vNormal);
-//    float3 vLightDir = normalize(g_vLightDir);
-//
-//    //  Specular lighting.
-//    float fNormalDotLight = saturate ( dot(vNormal, vLightDir) );  
-//    float3 vLightReflect = 2.0 * fNormalDotLight * vNormal - vLightDir;
-//    float fViewDotReflect = saturate( dot(vView, vLightReflect) );
-//    float fSpecIntensity1 = pow(fViewDotReflect, 2.0f);
-//    float4 fSpecIntensity = (float4)fSpecIntensity1;
-//
-//    float4 colSpecular = float4(1.0f, 1.0f, 1.0f, 1.0f);
-//    float4 lightSpecular = 0.1 * float4(1.0f, 1.0f, 1.0f, 1.0f);
-//    float4 specular = fSpecIntensity * colSpecular * lightSpecular;
-//	return specular;
+float4 PSMainSpotLight( PS_INPUT Input ) : SV_TARGET
+{
+    float visibility = Visibility(Input.vPositionView);
+    float4 vDiffuse = g_txDiffuse.Sample( g_samLinear, Input.vTexcoord );
+    float3 normal = normalize(Input.vNormal);
+//    float fLighting = saturate( dot( g_vLightDir, normalize(Input.vNormal) ) );
+//    fLighting = max( fLighting, g_fAmbient );
+//    return shadow * float4(xy.x, xy.y, 0.0, 1.0f);
+    return visibility * ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), Input.vPositionView, normal);
 }
 
 //--------------------------------------------------------------------------------------
 // GBuffer and related common utilities and structures
 struct GBuffer
 {
-    float4 normal_specular : SV_Target0;
-    float4 albedo : SV_Target1;
-    float2 positionZGrad : SV_Target2;
+    float4 normal_specular  : SV_Target0;
+    float4 albedo           : SV_Target1;
+    float2 positionZGrad    : SV_Target2;
 };
 
 // Above values PLUS depth buffer (last element)
-Texture2DMS<float4, 1> gGBufferTextures[4] : register(t0);
+Texture2DMS<float4, 1> gGBufferTextures[4] : register(t2);
 
 
 float2 EncodeSphereMap(float3 n)
@@ -130,7 +179,6 @@ float3 DecodeSphereMap(float2 e)
     n.z  = 3.0f - 8.0f * f;
     return n;
 }
-
 
 //--------------------------------------------------------------------------------------
 // G-buffer rendering
@@ -188,7 +236,8 @@ SurfaceData ComputeSurfaceDataFromGBufferSample(uint2 positionViewport, uint sam
     rawData.albedo = gGBufferTextures[1].Load(positionViewport.xy, sampleIndex).xyzw;
     rawData.positionZGrad = gGBufferTextures[2].Load(positionViewport.xy, sampleIndex).xy;
     float zBuffer = gGBufferTextures[3].Load(positionViewport.xy, sampleIndex).x;
-    
+
+
     float2 gbufferDim;
     uint dummy;
     gGBufferTextures[0].GetDimensions(gbufferDim.x, gbufferDim.y, dummy);
@@ -221,40 +270,28 @@ SurfaceData ComputeSurfaceDataFromGBufferSample(uint2 positionViewport, uint sam
     return data;
 }
 
-float4 BasicLoop(FullScreenTriangleVSOut input, uint sampleIndex)
-{
-    // How many total lights?
-//    uint totalLights, dummy;
-//    gLight.GetDimensions(totalLights, dummy);
-//    
-//    float3 lit = float3(0.0f, 0.0f, 0.0f);
-//
-//    [branch] if (mUI.visualizeLightCount) {
-//        lit = (float(totalLights) * rcp(255.0f)).xxx;
-//    } else {
 
-        SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), sampleIndex);
+
+float4 DirectionalLightPS(FullScreenTriangleVSOut input) : SV_Target
+{
+    if (gUseDirectionalLight) {
+        SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), 0);
         float4 vDiffuse = surface.albedo;
         
         float fLighting = saturate( dot( g_vLightDir, surface.normal) );
         fLighting = max( fLighting, g_fAmbient );
         return vDiffuse * fLighting;
-
-//        // Avoid shading skybox/background pixels
-//        if (surface.positionView.z < mCameraNearFar.y) {
-//            for (uint lightIndex = 0; lightIndex < totalLights; ++lightIndex) {
-//                PointLight light = gLight[lightIndex];
-//                AccumulateBRDF(surface, light, lit);
-//            }
-//        }
-//    }
-     
-//    return float4(lit, 1.0f);
+    } else {
+        return float4(0, 0, 0, 1.0f);
+    }
 }
 
-float4 LightPS(FullScreenTriangleVSOut input) : SV_Target
+
+float4 SpotLightPS(FullScreenTriangleVSOut input) : SV_Target
 {
-    // Shade only sample 0
-    return BasicLoop(input, 0);
-}
 
+    SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(input.positionViewport.xy), 0);
+    surface.normal = normalize(surface.normal);
+    float vis = Visibility(surface.positionView);
+    return vis * ComputeSpotLighting(/*surface.albedo*/float4(1.0f, 0.0f, 1.0f, 0.0f), surface.positionView, surface.normal);
+}

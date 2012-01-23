@@ -30,6 +30,11 @@
 CDXUTDialogResourceManager  g_DialogResourceManager; // manager for shared resources of dialogs
 CModelViewerCamera          g_Camera;               // A model viewing camera
 CDXUTDirectionWidget        g_LightControl;
+float                       g_SpotLightFOV = D3DX_PI / 12.0f;
+float                       g_SpotLightAspect = 0;
+CModelViewerCamera          g_SpotLight;               // A model viewing camera
+D3DXVECTOR3                 gSpotLightPos;
+
 CD3DSettingsDlg             g_D3DSettingsDlg;       // Device settings dialog
 CDXUTDialog                 g_HUD;                  // manages the 3D   
 CDXUTDialog                 g_SampleUI;             // dialog for sample specific controls
@@ -51,12 +56,30 @@ ID3D11VertexShader*         g_pVertexShader = NULL;
 ID3D11VertexShader*         gFullScreenTriangleVS = NULL;
 
 ID3D11PixelShader*          gForwardPS = NULL;
+ID3D11PixelShader*          gForwardSpotlightPS = NULL;
 ID3D11SamplerState*         g_pSamLinear = NULL;
+ID3D11SamplerState*         g_pSamPCF = NULL;
 ID3D11PixelShader*          gGBufferPS = NULL;
-ID3D11PixelShader*          gLightPS = NULL;
+ID3D11PixelShader*          gDirectionalLightPS = NULL;
+ID3D11PixelShader*          gSpotLightPS = NULL;
+
+ID3D11BlendState* mLightingBlendState;
+ID3D11BlendState* mNoBlendState;
+ID3D11DepthStencilState* mEqualStencilState;
+ID3D11DepthStencilState* mLessThanStencilState;
+
 
 // DS
 bool gUseDeferred  = false;
+bool gUseSpotLight = true;
+bool gUseDirectionalLight = false;
+bool gShadow = false;
+bool gRotateSpotLight = false;
+bool gSetCameraAtSpotLightPos = false;
+std::tr1::shared_ptr<Depth2D> mShadowMap;
+const UINT shadowMapWidth = 1024;
+const UINT shadowMapHeight = 1024;
+
 std::vector< std::tr1::shared_ptr<Texture2D> > mGBuffer;
 // Handy cache of list of RT pointers for G-buffer
 std::vector<ID3D11RenderTargetView*> mGBufferRTV;
@@ -71,9 +94,10 @@ ID3D11DepthStencilView* mDepthBufferReadOnlyDSV;
 
 
 // SPARK:
-bool gUseSpark = false;
+bool gUseSpark = true;
 spark::IContext* gSparkContext = nullptr;
 Forward* gForwardSpark = nullptr;
+ForwardSpotLight* gForwardSpotLightSpark = nullptr;
 GenerateGBuffer* gGenerateGBufferSpark= nullptr;
 DirectionalLightGBuffer * gDirectionalLightGBuffer = nullptr;
 
@@ -89,6 +113,8 @@ UINT                        g_iCBVSPerObjectBind = 0;
 
 struct CB_PS_PER_OBJECT
 {
+    D3DXMATRIX m_ViewInv;
+    D3DXMATRIX m_LightViewProj;
     D3DXVECTOR4 m_vObjectColor;
 };
 UINT                        g_iCBPSPerObjectBind = 0;
@@ -97,7 +123,22 @@ struct CB_PS_PER_FRAME
 {
     D3DXMATRIX  m_CameraProj;
     D3DXVECTOR4 m_vLightDirAmbient;
+
+    D3DXVECTOR4 m_SpotLightPos;
+    D3DXVECTOR4 m_SpotLightDir;
+    D3DXVECTOR4 m_SpotLightParameters; // fov, aspect, near, far
+
+    UINT        useSpotLight;
+    UINT        shadow;
+    float       shadowMapWidth;
+    float       shadowMapHeight;
+
+    UINT        useDirectionalLight;
+    UINT        padding1;
+    UINT        padding2;
+    UINT        padding3;
 };
+
 UINT                        g_iCBPSPerFrameBind = 1;
 
 ID3D11Buffer*               g_pcbVSPerObject = NULL;
@@ -107,12 +148,17 @@ ID3D11Buffer*               g_pcbPSPerFrame = NULL;
 //--------------------------------------------------------------------------------------
 // UI control IDs
 //--------------------------------------------------------------------------------------
-#define IDC_TOGGLEFULLSCREEN    1
-#define IDC_TOGGLEREF           3
-#define IDC_CHANGEDEVICE        4
+#define IDC_TOGGLEFULLSCREEN                1
+#define IDC_TOGGLEREF                       3
+#define IDC_CHANGEDEVICE                    4
 // SPARK:
-#define IDC_CHECKBOX_USE_SPARK  5
-#define IDC_CHECKBOX_DEFERRED   6
+#define IDC_CHECKBOX_USE_SPARK              5
+#define IDC_CHECKBOX_DEFERRED               6
+#define IDC_CHECKBOX_SPOTLIGHT              7
+#define IDC_CHECKBOX_SHADOW                 8
+#define IDC_CHECKBOX_ROTATE_SPOTLIGHT       9
+#define IDC_CHECKBOX_DIRLIGHT               10
+#define IDC_CHECKBOX_ALIGN_CAMERA_SPOTLIGHT 11
 
 //--------------------------------------------------------------------------------------
 // Forward declarations 
@@ -143,16 +189,30 @@ void FinalizeApp();
 
 
 // DS
-void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, ID3D11VertexShader *pVS, ID3D11PixelShader *pPS );
+void RenderSceneHLSL(   ID3D11DeviceContext* pd3dImmediateContext,
+                        ID3D11VertexShader *pVS, ID3D11PixelShader *pPS);
 
 void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, 
     D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, 
-    float fAmbient, D3DXVECTOR3 vCameraPos, ID3D11Device* pd3dDevice, 
+    float fAmbient, ID3D11Device* pd3dDevice, 
     ID3D11DeviceContext* pd3dImmediateContext , Base * sparkShader);
 
 void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetView* pRTV, 
     ID3D11DepthStencilView* pDSV, ID3D11Device* pd3dDevice, ID3D11VertexShader *pVS, 
-    ID3D11PixelShader *pPS, Base * sparkShader );
+    ID3D11PixelShader *pPS, Base * sparkShader, CModelViewerCamera *pCamera,
+    CModelViewerCamera * pLight, D3DXMATRIXA16 *mCenter  );
+
+void UpdatePerFrameCB(  ID3D11DeviceContext* pd3dImmediateContext, 
+                        D3DXVECTOR3 &vLightDir, float fAmbient, 
+                        CModelViewerCamera * pCamera, 
+                        Base * sparkShader );
+void SetIAState( ID3D11DeviceContext* pd3dImmediateContext );
+void UpdatePerObjectCBVS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, ID3D11DeviceContext* pd3dImmediateContext );
+void UpdatePerObjectCBPS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, 
+    CModelViewerCamera * pLight, ID3D11DeviceContext* pd3dImmediateContext );
+void BindShadowMap( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot );
+void ResetState( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot, UINT numSlots);
+
 
 void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice )
 {
@@ -174,116 +234,16 @@ void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice
     }
     else {
         d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), &mGBufferRTV.front(), mDepthBuffer->GetDepthStencil());
+        D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (mGBufferWidth), static_cast<FLOAT> (mGBufferHeight), 0.0f, 1.0f};
+        d3dDeviceContext->RSSetViewports(1, &viewPort);
     }
 
-    RenderScene(d3dDeviceContext, NULL, mDepthBuffer->GetDepthStencil(), pDevice, g_pVertexShader, gGBufferPS, gGenerateGBufferSpark);
-#if 0
-    d3dDeviceContext->IASetInputLayout(g_pVertexLayout11);
+    RenderScene(d3dDeviceContext, NULL, mDepthBuffer->GetDepthStencil(), pDevice, 
+        g_pVertexShader, gGBufferPS, gGenerateGBufferSpark, &g_Camera, &g_SpotLight, &g_mCenterMesh);
 
-    d3dDeviceContext->VSSetConstantBuffers(0, 1, &mPerFrameConstants);
-    d3dDeviceContext->VSSetShader(mGeometryVS->GetShader(), 0, 0);
-    
-    d3dDeviceContext->GSSetShader(0, 0, 0);
-
-    d3dDeviceContext->RSSetViewports(1, viewport);
-
-    d3dDeviceContext->PSSetConstantBuffers(0, 1, &mPerFrameConstants);
-    d3dDeviceContext->PSSetSamplers(0, 1, &mDiffuseSampler);
-    // Diffuse texture set per-material by DXUT mesh routines
-
-    // Set up render GBuffer render targets
-    d3dDeviceContext->OMSetDepthStencilState(mDepthState, 0);
-    d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), &mGBufferRTV.front(), mDepthBuffer->GetDepthStencil());
-    d3dDeviceContext->OMSetBlendState(mGeometryBlendState, 0, 0xFFFFFFFF);
-    
-    // Render opaque geometry
-    d3dDeviceContext->RSSetState(mRasterizerState);
-    d3dDeviceContext->PSSetShader(mGBufferPS->GetShader(), 0, 0);
-    g_Mesh11.Render(d3dDeviceContext, 0);
-
-    // Cleanup (aka make the runtime happy)
-    d3dDeviceContext->OMSetRenderTargets(0, 0, 0);
-
-    if (mSaveNextRenderState) {
-        const unsigned int bufferSize = 1024;
-        wchar_t fileName[bufferSize];
-        for (size_t i = 0; i < mGBufferSRV.size(); ++i) {
-            swprintf(fileName, bufferSize, L"%s_g%d.dds", kRenderStateFileNamePrefix, i);
-            SaveTexture(d3dDeviceContext, mGBufferSRV[i], fileName);
-        }
-    }
-#endif
 }
 
-#if 0
-void SaveTexture(ID3D11DeviceContext* d3dDeviceContext, ID3D11ShaderResourceView* resourceView, wchar_t *fileName)
-{
-    // NOTE: This path does not need to be fast so we create/destroy resources on the fly 
-    ID3D11Device* d3dDevice = DXUTGetD3D11Device();
 
-    // Use the SRV description for the format
-    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-    resourceView->GetDesc(&srvDesc);
-
-    DXGI_FORMAT format = srvDesc.Format;
-    // Fix depth/stencil formats (remove stencil)...
-    switch (format) {
-    case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
-        format = DXGI_FORMAT_R32_FLOAT;
-        break;
-    };
-
-    // Grab the underlying Texture2D description... assume all this works for now
-    ID3D11Resource *resource;
-    resourceView->GetResource(&resource);
-    ID3D11Texture2D *texture;
-    resource->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&texture);
-    SAFE_RELEASE(resource);
-    D3D11_TEXTURE2D_DESC texDesc;
-    texture->GetDesc(&texDesc);
-    SAFE_RELEASE(texture);
-
-    // To handle MSAA we first copy each sample to a vertical column of images
-    unsigned int flatTextureHeight = texDesc.Height * texDesc.SampleDesc.Count;
-    std::tr1::shared_ptr<Texture2D> flatTexture = std::tr1::shared_ptr<Texture2D>(
-        new Texture2D(d3dDevice, texDesc.Width, flatTextureHeight, format));
-
-    // Can't directly copy individual samples so we need a render pass for each sample
-    // Full screen triangle setup
-    d3dDeviceContext->IASetInputLayout(0);
-    d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    d3dDeviceContext->IASetVertexBuffers(0, 0, 0, 0, 0);
-
-    d3dDeviceContext->VSSetShader(mFullScreenTriangleVS->GetShader(), 0, 0);
-    d3dDeviceContext->GSSetShader(0, 0, 0);
-
-    d3dDeviceContext->RSSetState(mRasterizerState);
-    
-    d3dDeviceContext->PSSetShaderResources(0, 1, &resourceView);
-    d3dDeviceContext->PSSetShader(mSaveFlatResourcePS->GetShader(), 0, 0);
-    
-    ID3D11RenderTargetView * renderTargets[1] = {flatTexture->GetRenderTarget()};
-    d3dDeviceContext->OMSetRenderTargets(1, renderTargets, 0);
-    d3dDeviceContext->OMSetBlendState(mGeometryBlendState, 0, 0xFFFFFFFF);
-
-    // Copy each sample into column
-    D3D11_VIEWPORT viewport;
-    viewport.TopLeftX = 0.0f;
-    viewport.Width = float(texDesc.Width);
-    viewport.TopLeftY = 0.0f;
-    viewport.Height = float(flatTextureHeight);
-    viewport.MinDepth = 0.0f;
-    viewport.MaxDepth = 1.0f;
-
-    d3dDeviceContext->RSSetViewports(1, &viewport);
-    d3dDeviceContext->Draw(3, 0);
-
-    D3DX11SaveTextureToFile(d3dDeviceContext, flatTexture->GetTexture(), D3DX11_IFF_DDS, fileName);
-
-    // Cleanup
-    d3dDeviceContext->OMSetRenderTargets(0, 0, 0);
-}
-#endif
 //--------------------------------------------------------------------------------------
 // Entry point to the program. Initializes everything and goes into a message processing 
 // loop. Idle time is used to render the scene.
@@ -348,6 +308,11 @@ void InitApp()
     // SPARK:
     g_HUD.AddCheckBox( IDC_CHECKBOX_USE_SPARK, L"Use Spar(K)", 0, iY += 26, 140, 24, gUseSpark, 'K' );
     g_HUD.AddCheckBox( IDC_CHECKBOX_DEFERRED, L"Use Deferred (D)", 0, iY += 26, 140, 24, gUseDeferred, 'D' );
+    g_HUD.AddCheckBox( IDC_CHECKBOX_SPOTLIGHT, L"Use Spotlight (S)", 0, iY += 26, 140, 24, gUseSpotLight, 'S' );
+    g_HUD.AddCheckBox( IDC_CHECKBOX_DIRLIGHT, L"Use Directional Light (S)", 0, iY += 26, 140, 24, gUseDirectionalLight, 'Z' );
+    g_HUD.AddCheckBox( IDC_CHECKBOX_SHADOW, L"Shadow (L)", 0, iY += 26, 140, 24, gShadow, 'L' );
+    g_HUD.AddCheckBox( IDC_CHECKBOX_ROTATE_SPOTLIGHT, L"Rotate (R)", 0, iY += 26, 140, 24, gRotateSpotLight, 'R' );
+    g_HUD.AddCheckBox( IDC_CHECKBOX_ALIGN_CAMERA_SPOTLIGHT, L"Align Camera to Spotlight ", 0, iY += 26, 140, 24, gSetCameraAtSpotLightPos );
 
     g_SampleUI.SetCallback( OnGUIEvent ); iY = 10;
 
@@ -395,8 +360,24 @@ bool CALLBACK ModifyDeviceSettings( DXUTDeviceSettings* pDeviceSettings, void* p
 //--------------------------------------------------------------------------------------
 void CALLBACK OnFrameMove( double fTime, float fElapsedTime, void* pUserContext )
 {
+    static auto lastPos = gSpotLightPos;
     // Update the camera's position based on user input 
     g_Camera.FrameMove( fElapsedTime );
+
+    // Rotate the spotlight around Y axis.
+    if (gRotateSpotLight) {
+        D3DXMATRIXA16 m;
+        D3DXMatrixRotationY( &m, D3DX_PI/180000.0f * fTime);
+        D3DXVECTOR4 lightPos;
+        D3DXVec3Transform(&lightPos, &gSpotLightPos, &m);
+        gSpotLightPos.x = lightPos.x;
+        gSpotLightPos.y = lightPos.y;
+        gSpotLightPos.z = lightPos.z;
+    }
+
+    D3DXVECTOR3 vecSpotLightLookAt ( 0.0f, 0.0f, 0.0f );
+    g_SpotLight.SetViewParams( &gSpotLightPos, &vecSpotLightLookAt );
+
 }
 
 
@@ -514,6 +495,26 @@ void CALLBACK OnGUIEvent( UINT nEvent, int nControlID, CDXUTControl* pControl, v
         case IDC_CHECKBOX_DEFERRED:
             gUseDeferred = ((CDXUTCheckBox*)pControl)->GetChecked();
             break;
+
+        case IDC_CHECKBOX_SPOTLIGHT:
+            gUseSpotLight = ((CDXUTCheckBox*)pControl)->GetChecked();
+            break;
+
+        case IDC_CHECKBOX_DIRLIGHT:
+            gUseDirectionalLight = ((CDXUTCheckBox*)pControl)->GetChecked();
+            break;
+
+        case IDC_CHECKBOX_ALIGN_CAMERA_SPOTLIGHT:
+            gSetCameraAtSpotLightPos = ((CDXUTCheckBox*)pControl)->GetChecked();
+            break;
+
+        case IDC_CHECKBOX_SHADOW:
+            gShadow = ((CDXUTCheckBox*)pControl)->GetChecked();
+            break;
+
+        case IDC_CHECKBOX_ROTATE_SPOTLIGHT:
+            gRotateSpotLight = ((CDXUTCheckBox*)pControl)->GetChecked();
+            break;
     }
 
 }
@@ -592,8 +593,10 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     ID3DBlob* pFullScreenVSBuffer = NULL;
 
     ID3DBlob* pForwardPSBuffer = NULL;
+    ID3DBlob* pForwardSpotlightPSBuffer = NULL;
     ID3DBlob* pGBufferPSBuffer = NULL;
-    ID3DBlob* pLightPSBuffer = NULL;
+    ID3DBlob* pDirectionalLightPSBuffer = NULL;
+    ID3DBlob* pSpotLightPSBuffer = NULL;
   
     switch( DXUTGetD3D11DeviceFeatureLevel() )
     {
@@ -602,35 +605,12 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
             V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_5_0", &pVertexShaderBuffer ) );
             V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "FullScreenTriangleVS", "vs_5_0", &pFullScreenVSBuffer ) );
             V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_5_0", &pForwardPSBuffer ) );
+            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMainSpotLight", "ps_5_0", &pForwardSpotlightPSBuffer ) );
             V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "GBufferPS", "ps_5_0", &pGBufferPSBuffer ) );
-            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "LightPS", "ps_5_0", &pLightPSBuffer) );
+            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "DirectionalLightPS", "ps_5_0", &pDirectionalLightPSBuffer) );
+            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "SpotLightPS", "ps_5_0", &pSpotLightPSBuffer) );
             break;
            }
-//        case D3D_FEATURE_LEVEL_10_1:
-//           {
-//            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_1", &pVertexShaderBuffer ) );
-//            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_1", &pForwardPSBuffer ) );
-//            break;
-//           }
-//        case D3D_FEATURE_LEVEL_10_0:
-//           {
-//            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_0", &pVertexShaderBuffer ) );
-//            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_0", &pForwardPSBuffer ) );
-//            break;
-//           }
-//        case D3D_FEATURE_LEVEL_9_3:
-//           {
-//            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_0_level_9_3", &pVertexShaderBuffer ) );
-//            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_0_level_9_3", &pForwardPSBuffer ) );
-//            break;
-//           }
-//        case D3D_FEATURE_LEVEL_9_2: // Shader model 2 fits feature level 9_1
-//        case D3D_FEATURE_LEVEL_9_1:
-//           {
-//            V_RETURN( CompileShaderFromFile( L"DeferredShading_VS.hlsl", "VSMain", "vs_4_0_level_9_1", &pVertexShaderBuffer ) );
-//            V_RETURN( CompileShaderFromFile( L"DeferredShading_PS.hlsl", "PSMain", "ps_4_0_level_9_1", &pForwardPSBuffer ) );
-//            break;
-//           }
     }
 
     // Create the shaders
@@ -640,10 +620,14 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
                                               pFullScreenVSBuffer->GetBufferSize(), NULL, &gFullScreenTriangleVS) );
     V_RETURN( pd3dDevice->CreatePixelShader( pForwardPSBuffer->GetBufferPointer(),
                                              pForwardPSBuffer->GetBufferSize(), NULL, &gForwardPS ) );
+    V_RETURN( pd3dDevice->CreatePixelShader( pForwardSpotlightPSBuffer->GetBufferPointer(),
+                                             pForwardSpotlightPSBuffer->GetBufferSize(), NULL, &gForwardSpotlightPS ) );
     V_RETURN( pd3dDevice->CreatePixelShader( pGBufferPSBuffer->GetBufferPointer(),
                                              pGBufferPSBuffer->GetBufferSize(), NULL, &gGBufferPS) );
-    V_RETURN( pd3dDevice->CreatePixelShader( pLightPSBuffer->GetBufferPointer(),
-                                             pLightPSBuffer->GetBufferSize(), NULL, &gLightPS) );
+    V_RETURN( pd3dDevice->CreatePixelShader( pDirectionalLightPSBuffer->GetBufferPointer(),
+                                             pDirectionalLightPSBuffer->GetBufferSize(), NULL, &gDirectionalLightPS) );
+    V_RETURN( pd3dDevice->CreatePixelShader( pSpotLightPSBuffer->GetBufferPointer(),
+                                             pSpotLightPSBuffer->GetBufferSize(), NULL, &gSpotLightPS) );
 
     // Create our vertex input layout
     const D3D11_INPUT_ELEMENT_DESC layout[] =
@@ -658,7 +642,10 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
 
     SAFE_RELEASE( pVertexShaderBuffer );
     SAFE_RELEASE( pForwardPSBuffer );
+    SAFE_RELEASE (pForwardSpotlightPSBuffer);
     SAFE_RELEASE( pGBufferPSBuffer);
+    SAFE_RELEASE ( pDirectionalLightPSBuffer );
+    SAFE_RELEASE ( pSpotLightPSBuffer );
 
     // Load the mesh
     V_RETURN( g_Mesh11.Create( pd3dDevice, L"tiny\\tiny.sdkmesh", true ) );
@@ -676,6 +663,44 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     SamDesc.MinLOD = 0;
     SamDesc.MaxLOD = D3D11_FLOAT32_MAX;
     V_RETURN( pd3dDevice->CreateSamplerState( &SamDesc, &g_pSamLinear ) );
+
+    SamDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+    SamDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
+    V_RETURN( pd3dDevice->CreateSamplerState( &SamDesc, &g_pSamPCF) );
+
+
+
+    // Create lighting phase blend state
+    {
+        CD3D11_BLEND_DESC desc(D3D11_DEFAULT);
+        // Additive blending
+        desc.RenderTarget[0].BlendEnable = true;
+        desc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+        desc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+        desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+        desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+        desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+        desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        pd3dDevice->CreateBlendState(&desc, &mLightingBlendState);
+
+        desc.RenderTarget[0].BlendEnable = false;
+        pd3dDevice->CreateBlendState(&desc, &mNoBlendState);
+
+    }
+    // Lighting depth stencil state.
+    {
+        CD3D11_DEPTH_STENCIL_DESC desc(
+            TRUE, D3D11_DEPTH_WRITE_MASK_ZERO, D3D11_COMPARISON_LESS_EQUAL,    // Depth
+            TRUE, 0xFF, 0xFF,                                                     // Stencil
+            D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_COMPARISON_EQUAL, // Front face stencil
+            D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_COMPARISON_EQUAL  // Back face stencil
+            );
+        pd3dDevice->CreateDepthStencilState(&desc, &mEqualStencilState);
+
+        desc.DepthFunc = D3D11_COMPARISON_LESS;
+        pd3dDevice->CreateDepthStencilState(&desc, &mLessThanStencilState);
+    }
+
 
     // Setup constant buffers
     D3D11_BUFFER_DESC Desc;
@@ -699,10 +724,28 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
     g_Camera.SetViewParams( &vecEye, &vecAt );
     g_Camera.SetRadius( fObjectRadius * 3.0f, fObjectRadius * 0.5f, fObjectRadius * 10.0f );
 
+    // Setup the spotlight's view parameters
+//    D3DXVECTOR3 gSpotLightPos( fObjectRadius, 1.2f * fObjectRadius, 0.0f );
+    gSpotLightPos = D3DXVECTOR3( fObjectRadius, 1.2f * fObjectRadius, 0.0f );
+    D3DXVECTOR3 vecSpotLightLookAt ( 0.0f, 0.0f, 0.0f );
+    g_SpotLight.SetViewParams( &gSpotLightPos, &vecSpotLightLookAt );
+    // May change this later
+    g_SpotLight.SetRadius( fObjectRadius * 3.0f, fObjectRadius * 0.5f, fObjectRadius * 10.0f );
+
+
     // SPARK:
     gForwardSpark = gSparkContext->CreateShaderInstance<Forward>( pd3dDevice );
+    gForwardSpotLightSpark = gSparkContext->CreateShaderInstance<ForwardSpotLight>(pd3dDevice);
     gGenerateGBufferSpark = gSparkContext->CreateShaderInstance<GenerateGBuffer>( pd3dDevice );
     gDirectionalLightGBuffer = gSparkContext->CreateShaderInstance<DirectionalLightGBuffer>( pd3dDevice);
+
+
+    // Shadow map related resources
+    mShadowMap = std::tr1::shared_ptr<Depth2D>(new Depth2D(
+        pd3dDevice, shadowMapWidth, shadowMapHeight,
+        D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE,
+        false// Include stencil if using MSAA
+        ));
 
     return S_OK;
 }
@@ -724,6 +767,12 @@ HRESULT CALLBACK OnD3D11ResizedSwapChain( ID3D11Device* pd3dDevice, IDXGISwapCha
     g_Camera.SetProjParams( D3DX_PI / 4, fAspectRatio, 2.0f, 4000.0f );
     g_Camera.SetWindow( pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height );
     g_Camera.SetButtonMasks( MOUSE_MIDDLE_BUTTON, MOUSE_WHEEL, MOUSE_LEFT_BUTTON );
+
+    g_SpotLightAspect = 1.0f;
+    g_SpotLight.SetProjParams( g_SpotLightFOV, g_SpotLightAspect, 2.0f, 4000.0f );
+    g_SpotLight.SetWindow( shadowMapWidth, shadowMapHeight );
+//    g_SpotLight.SetButtonMasks( MOUSE_MIDDLE_BUTTON, MOUSE_WHEEL, MOUSE_LEFT_BUTTON );
+
 
     g_HUD.SetLocation( pBackBufferSurfaceDesc->Width - 170, 0 );
     g_HUD.SetSize( 170, 170 );
@@ -808,13 +857,26 @@ static spark::float3 Convert( const D3DXVECTOR3& v )
     return *reinterpret_cast<const spark::float3*>(&v);
 }
 
+static spark::float4 Convert( const D3DXVECTOR4& v )
+{
+    return *reinterpret_cast<const spark::float4*>(&v);
+}
+
+
 void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice );
+
+void SetSpotLigtParameters( D3DXVECTOR4 * vSpotLightPosView, D3DXVECTOR4 * vSpotLightDirView );
 
 void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device* pd3dDevice ) 
 {
     auto pDSV = DXUTGetD3D11DepthStencilView();
     auto pRTV = DXUTGetD3D11RenderTargetView();
     D3DXVECTOR3 vLightDir = g_LightControl.GetLightDirection();
+    D3DXVECTOR4 vLightDir4 = D3DXVECTOR4(vLightDir, 0.0f);
+    D3DXVec4Transform(&vLightDir4, &vLightDir4, g_Camera.GetViewMatrix());
+    vLightDir = D3DXVECTOR3(vLightDir4);
+
+
     float fAmbient = 0.1f;
 
     if (gUseSpark) {
@@ -828,7 +890,15 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
         gDirectionalLightGBuffer->SetLightDir(Convert(vLightDir));
         gDirectionalLightGBuffer->Submit(pd3dDevice, d3dDeviceContext); 
     } else {
+        float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+        d3dDeviceContext->ClearRenderTargetView(pRTV, ClearColor );
         d3dDeviceContext->OMSetRenderTargets(1, &pRTV, pDSV);
+        D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (mGBufferWidth), static_cast<FLOAT> (mGBufferHeight), 0.0f, 1.0f};
+        d3dDeviceContext->RSSetViewports(1, &viewPort);
+
+        d3dDeviceContext->OMSetBlendState(mLightingBlendState, 0, 0xFFFFFFFF);
+        d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
+
         // Full screen triangle setup
         d3dDeviceContext->IASetInputLayout(0);
         d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -838,27 +908,52 @@ void RenderDeferredLighting( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device
         d3dDeviceContext->GSSetShader(0, 0, 0);
 
 
-        d3dDeviceContext->PSSetShaderResources(0, static_cast<UINT>(mGBufferSRV.size()), &mGBufferSRV.front());
+        BindShadowMap(d3dDeviceContext, 1);
+        d3dDeviceContext->PSSetShaderResources(2, static_cast<UINT>(mGBufferSRV.size()), &mGBufferSRV.front());
 
-        // Do pixel frequency shading
-            // Get the light direction
+        d3dDeviceContext->PSSetSamplers( 0, 1, &g_pSamLinear );
+        d3dDeviceContext->PSSetSamplers( 1, 1, &g_pSamPCF );
 
-        D3D11_MAPPED_SUBRESOURCE MappedResource;
-        d3dDeviceContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource );
-        CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
-        pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
-        d3dDeviceContext->Unmap( g_pcbPSPerFrame, 0 );
+        UpdatePerFrameCB(d3dDeviceContext, vLightDir, fAmbient, &g_Camera, gDirectionalLightGBuffer);
+        UpdatePerObjectCBPS(&g_mCenterMesh, &g_Camera, &g_SpotLight, d3dDeviceContext);
 
-        d3dDeviceContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
-
-        d3dDeviceContext->PSSetShader(gLightPS, 0, 0);
-    //    d3dDeviceContext->OMSetDepthStencilState(mEqualStencilState, 0);
+        d3dDeviceContext->PSSetShader(gDirectionalLightPS, 0, 0);
         d3dDeviceContext->Draw(3, 0);
+
+        if (gUseSpotLight) {
+            d3dDeviceContext->PSSetShader(gSpotLightPS, 0, 0);
+            d3dDeviceContext->Draw(3, 0);
+        }
+        ResetState(d3dDeviceContext, 0, 5);
     }
+}
+
+void GenerateShadowMap( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice, ID3D11RenderTargetView* pRTV ) 
+{
+    float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
+    ID3D11RenderTargetView* pNullRTV[] = {NULL};
+    pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, mShadowMap->GetDepthStencil());
+    D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (shadowMapWidth), static_cast<FLOAT> (shadowMapHeight), 0.0f, 1.0f};
+    pd3dImmediateContext->RSSetViewports(1, &viewPort);
+
+    if (gUseSpark) {
+        gForwardSpotLightSpark->SetMyTarget( NULL );
+        gForwardSpotLightSpark->SetShadowMap( NULL );
+        gForwardSpotLightSpark->SetMyDepthStencilState( NULL );
+    }
+
+    // Generate the shadow map.
+    pd3dImmediateContext->ClearDepthStencilView( mShadowMap->GetDepthStencil(), D3D11_CLEAR_DEPTH, 1.0, 0 );
+    RenderScene(pd3dImmediateContext, pRTV, mShadowMap->GetDepthStencil(), 
+        pd3dDevice, g_pVertexShader, NULL, gForwardSpotLightSpark, &g_SpotLight, &g_SpotLight, &g_mCenterMesh);
+    pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, NULL);
 }
 
 void RenderDeferred( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice ) 
 {
+    ID3D11RenderTargetView* pRTV = DXUTGetD3D11RenderTargetView();
+    GenerateShadowMap(pd3dImmediateContext, pd3dDevice, pRTV);
     RenderGBuffer(pd3dImmediateContext, pd3dDevice);
     RenderDeferredLighting(pd3dImmediateContext, pd3dDevice);
 }
@@ -882,6 +977,10 @@ void CALLBACK OnD3D11FrameRender( ID3D11Device* pd3dDevice, ID3D11DeviceContext*
     ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
     pd3dImmediateContext->ClearDepthStencilView( pDSV, D3D11_CLEAR_DEPTH, 1.0, 0 );
 
+    if (gSetCameraAtSpotLightPos) {
+        D3DXVECTOR3 vecAt ( 0.0f, 0.0f, -0.0f );
+        g_Camera.SetViewParams(&gSpotLightPos, &vecAt);
+    }
 
     if (gUseDeferred) {
         RenderDeferred(pd3dImmediateContext, pd3dDevice);
@@ -927,8 +1026,13 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
     SAFE_RELEASE( gFullScreenTriangleVS);
     SAFE_RELEASE( gForwardPS );
     SAFE_RELEASE( g_pSamLinear );
+    SAFE_RELEASE( g_pSamPCF )
     SAFE_RELEASE( gGBufferPS );
-    SAFE_RELEASE( gLightPS);
+    SAFE_RELEASE( gDirectionalLightPS);
+    SAFE_RELEASE ( gForwardSpotlightPS );
+    SAFE_RELEASE( mLightingBlendState );
+    SAFE_RELEASE( mEqualStencilState );
+    SAFE_RELEASE( mLessThanStencilState );
 
     SAFE_RELEASE( g_pcbVSPerObject );
     SAFE_RELEASE( g_pcbPSPerObject );
@@ -936,85 +1040,79 @@ void CALLBACK OnD3D11DestroyDevice( void* pUserContext )
 
     // SPARK:
     SAFE_RELEASE( gForwardSpark );
+    SAFE_RELEASE( gForwardSpotLightSpark );
     SAFE_RELEASE( gGenerateGBufferSpark);
     SAFE_RELEASE( gDirectionalLightGBuffer );
 }
+
+
+
 
 
 void RenderForward( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice )
 {
     ID3D11RenderTargetView* pRTV = DXUTGetD3D11RenderTargetView();
     ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
-    if (gUseSpark) {
-        gForwardSpark->SetMyTarget( pRTV );
+    GenerateShadowMap(pd3dImmediateContext, pd3dDevice, pRTV);
+//    if (gUseSpark) {
+//        gForwardSpark->SetMyTarget( pRTV );
+//    }
+    float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
+    pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
+    D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (mGBufferWidth) ,static_cast<FLOAT> (mGBufferHeight) , 0.0f, 1.0f};
+    pd3dImmediateContext->RSSetViewports(1, &viewPort);
+
+    BindShadowMap(pd3dImmediateContext, 1);
+
+    ID3D11PixelShader * pPS = NULL;
+    Base *pSparkShader = NULL;
+    for (UINT light = 0; light < 1U + gUseSpotLight; ++light)
+    {
+        if (light == 0) {
+            // Hack. because control flows don't seem to be working inside Spark.
+            // Also float4 * uint doesn't seem to be working.
+            if (!gUseDirectionalLight)
+                continue; 
+
+            pPS = gForwardPS;
+            pSparkShader = gForwardSpark;
+            gForwardSpark->SetMyTarget( pRTV );
+        }
+        else {
+            if (gUseSpark) {
+                gForwardSpotLightSpark->SetMyDepthStencilState(mEqualStencilState);
+                gForwardSpotLightSpark->SetShadowMap( mShadowMap->GetShaderResource() );
+            } else {
+                pd3dImmediateContext->OMSetBlendState(mLightingBlendState, 0, 0xFFFFFFFF);
+                pd3dImmediateContext->OMSetDepthStencilState(mEqualStencilState, 0);
+            }
+            pPS = gForwardSpotlightPS;
+            pSparkShader = gForwardSpotLightSpark;
+            gForwardSpotLightSpark->SetMyTarget( pRTV );
+        }
+        RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, 
+            pPS, pSparkShader, &g_Camera, &g_SpotLight, &g_mCenterMesh);
     }
-    RenderScene(pd3dImmediateContext, pRTV, pDSV, pd3dDevice, g_pVertexShader, gForwardPS, gForwardSpark);
+
+    ResetState(pd3dImmediateContext, 1, 1);
 }
 
-void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vLightDir, float fAmbient, D3DXMATRIX &mWorld, D3DXMATRIX &mProj, D3DXMATRIX &mView, ID3D11VertexShader *pVS, ID3D11PixelShader *pPS )
+
+void RenderSceneHLSL(   ID3D11DeviceContext* pd3dImmediateContext, 
+                        ID3D11VertexShader *pVS, ID3D11PixelShader *pPS)
 {
-    HRESULT hr;
-
-    // Per frame cb update
-    D3D11_MAPPED_SUBRESOURCE MappedResource;
-    V( pd3dImmediateContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
-    CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
-    pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
-    pd3dImmediateContext->Unmap( g_pcbPSPerFrame, 0 );
-
-    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
-
-    //Get the mesh
-    //IA setup
-    pd3dImmediateContext->IASetInputLayout( g_pVertexLayout11 );
-    UINT Strides[1];
-    UINT Offsets[1];
-    ID3D11Buffer* pVB[1];
-    pVB[0] = g_Mesh11.GetVB11( 0, 0 );
-    Strides[0] = ( UINT )g_Mesh11.GetVertexStride( 0, 0 );
-    Offsets[0] = 0;
-    pd3dImmediateContext->IASetVertexBuffers( 0, 1, pVB, Strides, Offsets );
-    pd3dImmediateContext->IASetIndexBuffer( g_Mesh11.GetIB11( 0 ), g_Mesh11.GetIBFormat11( 0 ), 0 );
 
     // Set the shaders
     pd3dImmediateContext->VSSetShader( pVS, NULL, 0 );
     pd3dImmediateContext->PSSetShader( pPS, NULL, 0 );
-
-    // Set the per object constant data
-    mWorld = g_mCenterMesh * *g_Camera.GetWorldMatrix();
-    mProj = *g_Camera.GetProjMatrix();
-    mView = *g_Camera.GetViewMatrix();
-
-    D3DXMATRIX mWorldViewProjection;
-    mWorldViewProjection = mWorld * mView * mProj;
-
-    D3DXMATRIX mWorldView;
-    mWorldView = mWorld * mView ;
-
-    // VS Per object
-    V( pd3dImmediateContext->Map( g_pcbVSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
-    CB_VS_PER_OBJECT* pVSPerObject = ( CB_VS_PER_OBJECT* )MappedResource.pData;
-    D3DXMatrixTranspose( &pVSPerObject->m_WorldViewProj, &mWorldViewProjection );
-    D3DXMatrixTranspose( &pVSPerObject->m_World, &mWorld );
-    D3DXMatrixTranspose( &pVSPerObject->m_WorldView, &mWorldView );
-    pd3dImmediateContext->Unmap( g_pcbVSPerObject, 0 );
-    pVSPerObject->m_vCameraPos = D3DXVECTOR4(*g_Camera.GetEyePt(), 1.0f);
-
-    pd3dImmediateContext->VSSetConstantBuffers( g_iCBVSPerObjectBind, 1, &g_pcbVSPerObject );
-
-    // PS Per object
-    V( pd3dImmediateContext->Map( g_pcbPSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
-    CB_PS_PER_OBJECT* pPSPerObject = ( CB_PS_PER_OBJECT* )MappedResource.pData;
-    pPSPerObject->m_vObjectColor = D3DXVECTOR4( 1, 1, 1, 1 );
-    pd3dImmediateContext->Unmap( g_pcbPSPerObject, 0 );
-
-    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
 
     //Render
     SDKMESH_SUBSET* pSubset = NULL;
     D3D11_PRIMITIVE_TOPOLOGY PrimType;
 
     pd3dImmediateContext->PSSetSamplers( 0, 1, &g_pSamLinear );
+    pd3dImmediateContext->PSSetSamplers( 1, 1, &g_pSamPCF );
 
     for( UINT subset = 0; subset < g_Mesh11.GetNumSubsets( 0 ); ++subset )
     {
@@ -1028,13 +1126,15 @@ void RenderSceneHLSL( ID3D11DeviceContext* pd3dImmediateContext, D3DXVECTOR3 &vL
         ID3D11ShaderResourceView* pDiffuseRV = g_Mesh11.GetMaterial( pSubset->MaterialID )->pDiffuseRV11;
         pd3dImmediateContext->PSSetShaderResources( 0, 1, &pDiffuseRV );
 
+
         pd3dImmediateContext->DrawIndexed( ( UINT )pSubset->IndexCount, 0, ( UINT )pSubset->VertexStart );
     }
+
 }
 
 void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDSV, 
     D3DXMATRIX mWorld, D3DXMATRIX mView, D3DXMATRIX mProj, D3DXVECTOR3 vLightDir, 
-    float fAmbient, D3DXVECTOR3 vCameraPos, ID3D11Device* pd3dDevice, 
+    float fAmbient, ID3D11Device* pd3dDevice, 
     ID3D11DeviceContext* pd3dImmediateContext, Base * sparkShader )
 {
     // Set color and depth/stencil targets
@@ -1048,7 +1148,7 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
     sparkShader->SetLightDir( Convert(vLightDir) );
     sparkShader->SetAmbient( fAmbient );
     sparkShader->SetLinearSampler( g_pSamLinear );
-//    gShaderInstance->SetCameraPos(Convert(vCameraPos));
+    sparkShader->SetPcfSampler( g_pSamPCF );
 
     // Set up the vertex stream
     ID3D11Buffer* vb = g_Mesh11.GetVB11( 0, 0 );
@@ -1094,12 +1194,17 @@ void RenderSceneSpark( ID3D11RenderTargetView* pRTV, ID3D11DepthStencilView* pDS
     }
 
     // Restore color and depth/stencil targets to what the D3D code expects
-    pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
+//    pd3dImmediateContext->OMSetRenderTargets(1, &pRTV, pDSV);
+//    D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (mGBufferWidth), static_cast<FLOAT> (mGBufferHeight), 0.0f, 1.0f};
+//    pd3dImmediateContext->RSSetViewports(1, &viewPort);
+
 }
+
 
 void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetView* pRTV, 
     ID3D11DepthStencilView* pDSV, ID3D11Device* pd3dDevice, ID3D11VertexShader *pVS, 
-    ID3D11PixelShader *pPS, Base * sparkShader )
+    ID3D11PixelShader *pPS, Base * sparkShader, CModelViewerCamera *pCamera, 
+    CModelViewerCamera * pLight, D3DXMATRIXA16 * mCenter)
 {
     // Common:
     D3DXVECTOR3 vLightDir;
@@ -1108,31 +1213,177 @@ void RenderScene( ID3D11DeviceContext* pd3dImmediateContext, ID3D11RenderTargetV
     D3DXMATRIX mProj;
 
     // Get the projection & view matrix from the camera class
-    mProj = *g_Camera.GetProjMatrix();
-    mView = *g_Camera.GetViewMatrix();
-    D3DXVECTOR3 vCameraPos = *g_Camera.GetEyePt();
+    D3DXVECTOR3 vCameraPos = *(pCamera->GetEyePt());
 
     // Get the light direction
     vLightDir = g_LightControl.GetLightDirection();
 
     float fAmbient = 0.1f;
 
-    mWorld = g_mCenterMesh * *g_Camera.GetWorldMatrix();
-    mProj = *g_Camera.GetProjMatrix();
-    mView = *g_Camera.GetViewMatrix();
+    mWorld = *mCenter * *(pCamera->GetWorldMatrix());
+    mProj = *(pCamera->GetProjMatrix());
+    mView = *(pCamera->GetViewMatrix());
     
+    D3DXVECTOR4 vLightDir4 = D3DXVECTOR4(vLightDir, 0.0f);
+    D3DXVec4Transform(&vLightDir4, &vLightDir4, &mView);
+    vLightDir = D3DXVECTOR3(vLightDir4);
+
+    // Per frame cb update
+    UpdatePerFrameCB(pd3dImmediateContext, vLightDir, fAmbient, pCamera, sparkShader);
+    // Set the per object constant data
+    UpdatePerObjectCBVS(mCenter, pCamera, pd3dImmediateContext);
+    // PS Per object
+    UpdatePerObjectCBPS(mCenter, pCamera, pLight, pd3dImmediateContext);
+
+    SetIAState(pd3dImmediateContext);
 
     // D3D11:
     if(!gUseSpark)
     {
-        RenderSceneHLSL(pd3dImmediateContext, vLightDir, fAmbient, mWorld, mProj, mView, pVS, pPS);
+        RenderSceneHLSL(pd3dImmediateContext, pVS, pPS);
     }
     else
     {
         // SPARK:
-        RenderSceneSpark(pRTV, pDSV, mWorld, mView, mProj, vLightDir, fAmbient, vCameraPos, pd3dDevice, pd3dImmediateContext, sparkShader);
+        RenderSceneSpark(pRTV, pDSV, mWorld, mView, mProj, vLightDir, fAmbient, pd3dDevice, pd3dImmediateContext, sparkShader);
     }
 }
 
+void SetSpotLigtParameters( D3DXVECTOR4 * vSpotLightPosView, D3DXVECTOR4 * vSpotLightDirView )
+{
+    auto viewMat = *g_Camera.GetViewMatrix();
+    auto vDirWorld = D3DXVECTOR4(*g_SpotLight.GetLookAtPt() - *g_SpotLight.GetEyePt(), 0.0f);
+    auto vSpotLightPosWorld = D3DXVECTOR4(*g_SpotLight.GetEyePt(), 1.0f) ;
+    D3DXVec4Transform(vSpotLightPosView, &vSpotLightPosWorld, &viewMat);
+    D3DXVec4Transform(vSpotLightDirView, &vDirWorld, &viewMat);
+}
 
+void UpdatePerFrameCB(  ID3D11DeviceContext* pd3dImmediateContext, 
+                        D3DXVECTOR3 &vLightDir, 
+                        float fAmbient, 
+                        CModelViewerCamera * pCamera, 
+                        Base * sparkShader )
+{
+    D3D11_MAPPED_SUBRESOURCE MappedResource;
+    D3DXVECTOR4 vSpotLightPosView;
+    D3DXVECTOR4 vSpotLightDirView;
+    SetSpotLigtParameters(&vSpotLightPosView, &vSpotLightDirView);
 
+    HRESULT hr;
+    V( pd3dImmediateContext->Map( g_pcbPSPerFrame, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
+    CB_PS_PER_FRAME* pPerFrame = ( CB_PS_PER_FRAME* )MappedResource.pData;
+    pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
+    D3DXMatrixTranspose( &pPerFrame->m_CameraProj, pCamera->GetProjMatrix() );
+    pPerFrame->m_vLightDirAmbient = D3DXVECTOR4( vLightDir.x, vLightDir.y, vLightDir.z, fAmbient );
+    pPerFrame->m_SpotLightDir = vSpotLightDirView;
+    pPerFrame->m_SpotLightPos = vSpotLightPosView;
+    pPerFrame->m_SpotLightParameters = D3DXVECTOR4(g_SpotLightFOV * 0.5f, g_SpotLightAspect, g_SpotLight.GetNearClip(), g_SpotLight.GetFarClip());
+    pPerFrame->useSpotLight = gUseSpotLight;
+    pPerFrame->useDirectionalLight = gUseDirectionalLight;
+    pPerFrame->shadow = gShadow;
+    pPerFrame->shadowMapWidth = shadowMapWidth;
+    pPerFrame->shadowMapHeight = shadowMapHeight;
+    pd3dImmediateContext->Unmap( g_pcbPSPerFrame, 0 );
+    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerFrameBind, 1, &g_pcbPSPerFrame );
+
+    if (gUseSpark) {
+        sparkShader->SetG_SpotLightPosView(Convert(vSpotLightPosView));
+        sparkShader->SetG_SpotLightDir(Convert(vSpotLightDirView));
+        sparkShader->SetG_SpotLightParams(Convert(D3DXVECTOR4(g_SpotLightFOV * 0.5f, 
+                    g_SpotLightAspect, g_SpotLight.GetNearClip(), g_SpotLight.GetFarClip())));
+        sparkShader->SetGUseSpotLight(gUseSpotLight);
+        sparkShader->SetGShadow(gShadow);
+        sparkShader->SetGShadowMapWidth(static_cast<float>(shadowMapWidth));
+        sparkShader->SetGShadowMapHeight(static_cast<float>(shadowMapHeight));
+        sparkShader->SetGUseDirectionalLight(gUseDirectionalLight);
+    }
+}
+
+void SetIAState( ID3D11DeviceContext* pd3dImmediateContext )
+{
+    pd3dImmediateContext->IASetInputLayout( g_pVertexLayout11 );
+    UINT Strides[1];
+    UINT Offsets[1];
+    ID3D11Buffer* pVB[1];
+    pVB[0] = g_Mesh11.GetVB11( 0, 0 );
+    Strides[0] = ( UINT )g_Mesh11.GetVertexStride( 0, 0 );
+    Offsets[0] = 0;
+    pd3dImmediateContext->IASetVertexBuffers( 0, 1, pVB, Strides, Offsets );
+    pd3dImmediateContext->IASetIndexBuffer( g_Mesh11.GetIB11( 0 ), g_Mesh11.GetIBFormat11( 0 ), 0 );
+}
+
+void UpdatePerObjectCBVS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, ID3D11DeviceContext* pd3dImmediateContext )
+{
+    HRESULT hr = S_OK;
+    D3DXMATRIX mWorld, mView, mProj;
+    mWorld = *mCenter * *(pCamera->GetWorldMatrix());
+    mProj = *(pCamera->GetProjMatrix());
+    mView = *(pCamera->GetViewMatrix());
+
+    D3DXMATRIX mWorldViewProjection;
+    mWorldViewProjection = mWorld * mView * mProj;
+
+    D3DXMATRIX mWorldView;
+    mWorldView = mWorld * mView ;
+
+    D3D11_MAPPED_SUBRESOURCE MappedResource;
+    V( pd3dImmediateContext->Map( g_pcbVSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
+    CB_VS_PER_OBJECT* pVSPerObject = ( CB_VS_PER_OBJECT* )MappedResource.pData;
+    D3DXMatrixTranspose( &pVSPerObject->m_WorldViewProj, &mWorldViewProjection );
+    D3DXMatrixTranspose( &pVSPerObject->m_World, &mWorld );
+    D3DXMatrixTranspose( &pVSPerObject->m_WorldView, &mWorldView );
+    pVSPerObject->m_vCameraPos = D3DXVECTOR4(*(pCamera->GetEyePt()), 1.0f);
+    pd3dImmediateContext->Unmap( g_pcbVSPerObject, 0 );
+    pd3dImmediateContext->VSSetConstantBuffers( g_iCBVSPerObjectBind, 1, &g_pcbVSPerObject );
+}
+
+void UpdatePerObjectCBPS( D3DXMATRIXA16 * mCenter, CModelViewerCamera * pCamera, 
+    CModelViewerCamera * pLight, ID3D11DeviceContext* pd3dImmediateContext )
+{
+    HRESULT hr = S_OK;
+    D3DXMATRIX mWorld, mView, mProj;
+    mWorld = *mCenter * *(pCamera->GetWorldMatrix());
+    mProj = *(pCamera->GetProjMatrix());
+    mView = *(pCamera->GetViewMatrix());
+
+    D3DXMATRIX mViewInv;
+    FLOAT det;
+    D3DXMatrixInverse(&mViewInv, &det, &mView);
+
+    D3DXMATRIX mLightViewProj;
+    mLightViewProj = *(pLight->GetViewMatrix()) * *(pLight->GetProjMatrix());
+    
+    D3D11_MAPPED_SUBRESOURCE MappedResource;
+    V( pd3dImmediateContext->Map( g_pcbPSPerObject, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
+    CB_PS_PER_OBJECT* pPSPerObject = ( CB_PS_PER_OBJECT* )MappedResource.pData;
+    D3DXMatrixTranspose( &pPSPerObject->m_ViewInv , &mViewInv );
+    D3DXMatrixTranspose( &pPSPerObject->m_LightViewProj , &mLightViewProj );
+    
+//    pPSPerObject->m_ViewInv = mViewInv;
+//    pPSPerObject->m_LightViewProj = mLightViewProj;
+    pPSPerObject->m_vObjectColor = D3DXVECTOR4( 1, 1, 1, 1 );
+    pd3dImmediateContext->Unmap( g_pcbPSPerObject, 0 );
+
+    pd3dImmediateContext->PSSetConstantBuffers( g_iCBPSPerObjectBind, 1, &g_pcbPSPerObject );
+
+    if (gUseSpark) {
+        gForwardSpotLightSpark->SetG_viewInv(Convert(mViewInv));
+        gForwardSpotLightSpark->SetG_LightViewProj(Convert(mLightViewProj));
+    }
+}
+
+void BindShadowMap( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot )
+{
+    auto shadowMapRSV = mShadowMap->GetShaderResource();
+    pd3dImmediateContext->PSSetShaderResources( startSlot, 1, &shadowMapRSV );
+
+}
+
+void ResetState( ID3D11DeviceContext* pd3dImmediateContext, UINT startSlot, UINT numSlots )
+{
+    pd3dImmediateContext->OMSetBlendState(NULL, NULL, 0xFFFFFFFF);
+    pd3dImmediateContext->OMSetDepthStencilState(NULL, 0);
+    const UINT numMaxSlots = 8;
+    ID3D11ShaderResourceView * nullSRV[numMaxSlots] = {NULL};
+    pd3dImmediateContext->PSSetShaderResources( startSlot, numSlots, nullSRV );
+}

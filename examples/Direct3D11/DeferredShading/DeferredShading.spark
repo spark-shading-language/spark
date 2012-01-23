@@ -23,6 +23,7 @@ abstract shader class Base extends D3D11DrawPass
     input @Uniform float4            objectColor;
     input @Uniform Texture2D[float4] diffuseTexture;
     input @Uniform SamplerState      linearSampler;
+    input @Uniform DepthStencilState myDepthStencilState;
 
     // @AssembledVertex
     //
@@ -40,6 +41,21 @@ abstract shader class Base extends D3D11DrawPass
 //    input @Uniform float3            cameraPos;
 //    abstract output @Pixel float4 myTarget ;
 
+    // SpotLight parameters.
+    input @Uniform float4       g_SpotLightPosView;
+    input @Uniform float4       g_SpotLightDir;
+    input @Uniform float4       g_SpotLightParams;
+    input @Uniform uint         gUseSpotLight;
+    input @Uniform uint         gShadow        ;
+    input @Uniform float        gShadowMapWidth;
+    input @Uniform float        gShadowMapHeight    ;
+    input @Uniform uint         gUseDirectionalLight;
+
+//  Shadowmap related things.
+    input @Uniform float4x4     g_viewInv;
+    input @Uniform float4x4     g_LightViewProj;
+    input @Uniform Texture2D[float]  shadowMap;
+    input @Uniform SamplerComparisonState      pcfSampler;
 }
 
 abstract mixin shader class SurfaceAttributes extends D3D11DrawPass
@@ -69,6 +85,7 @@ abstract mixin shader class GenerateSurfaceAttributes
     // @CoarseVertex
     //
     @CoarseVertex float3 N_world = mul(N_model, float3x3(world));
+    @CoarseVertex float3 N_view = mul(N_model, float3x3(worldview));
 //    @CoarseVertex float3 viewVec = normalize(cameraPos - mul(float4(P_model, 1.0f), world).xyz);
     @CoarseVertex float3 P_view = mul(float4(P_model,1.0f), worldview).xyz;
 
@@ -77,30 +94,113 @@ abstract mixin shader class GenerateSurfaceAttributes
     override RS_Position = mul(float4(P_model, 1.0f), worldViewProj);
 
     override positionView = P_view;         // View space position
-    override normal = normalize(N_world);               // World space normal
+    override normal = normalize(N_view);               // View space normal
     override albedo = Sample(diffuseTexture, linearSampler, texCoord);
     override specularAmount = 0.9f;        // Treated as a multiplier on albedo
     override specularPower = 25.0f;
 }
 
-
-abstract mixin shader class DirectionalLight
+abstract mixin shader class LightGBuffer
     extends Base, SurfaceAttributes
 {
+    output @Pixel float4 myTarget;
+}
+
+abstract mixin shader class DirectionalLight
+    extends Base, SurfaceAttributes, LightGBuffer
+{
+    @Fragment float4 GetColor(@Fragment float4 color) {
+        if (gUseDirectionalLight == 1) {
+                return color;
+        } 
+        return float4(0, 0, 0, 1);
+    }
 
     //@Fragment float4 color = float4(normal, 1.0f);
     // @Pixel
     //
     @Fragment float4 diffuse  = albedo;
     @Fragment float  lighting = max(saturate(dot(lightDir, normal)), ambient);
-    @Fragment float4 color    = diffuse * lighting ;
+    @Fragment float4 tmp_color    = diffuse * lighting ;
+    // The following line works
+     @Fragment float4 color = tmp_color * gUseDirectionalLight;
+    // but the next one doesn't
+//    @Fragment float4 color = GetColor(tmp_color);
 
-    output @Pixel float4 myTarget = color;
+    override output @Pixel float4 myTarget = color ;
 }
 
 
 shader class Forward extends GenerateSurfaceAttributes, DirectionalLight
 {}
+
+abstract mixin shader class SpotLight
+    extends Base, SurfaceAttributes, LightGBuffer
+{
+    @Fragment float4 ComputeSpotLighting(@Fragment float4 vDiffuse, 
+                                        @Fragment float3 positionView, 
+                                        @Fragment float3 normalView)
+    {
+        float D3DX_PI = 3.141592654f;
+
+        float d = distance(positionView, g_SpotLightPosView.xyz);
+        float3 lightDirView = normalize(g_SpotLightPosView.xyz - positionView);
+        float fLighting = saturate(dot(lightDirView, normalView));
+
+        float cosoutside = cos (g_SpotLightParams.x);
+        float cosinside = cos (g_SpotLightParams.x - D3DX_PI/36.0f);
+        float cosangle = saturate(dot(normalize(-g_SpotLightDir.xyz), lightDirView)) ;
+        float atten = pow(cosangle, 2.0f) / (d * d);
+        atten = atten * smoothstep(cosoutside, cosinside, cosangle);
+        float intensity = 20000.0f;
+        return atten * intensity *  vDiffuse * fLighting;
+    }
+
+    @Fragment float Visibility(@Fragment float3 posView)
+    {
+        float vis = float(1);
+        if (gShadow == 1 ) {
+            float4 vPositionView = float4(posView, 1.0f);
+            float4 vPositionWorld = mul( vPositionView, g_viewInv );
+            float4 vPositionSM = mul(vPositionWorld, g_LightViewProj);
+            float3 ndc = vPositionSM.xyz/vPositionSM.w; 
+            float2 xy_old = (ndc.xy + float2(1.0f, 1.0f)) * 0.5f;
+            float2 xy = float2(xy_old.x, 1.0f - xy_old.y);
+            vis = SampleCmpLevelZero(shadowMap, pcfSampler, xy, ndc.z);
+        }
+        return vis ;
+    }
+
+
+    //@Fragment float4 color = float4(normal, 1.0f);
+    // @Pixel
+    //
+    @Fragment float vis = Visibility(positionView);
+    @Fragment float4  lighting = ComputeSpotLighting(float4(1.0f, 0.0f, 1.0f, 0.0f), positionView, normal);
+    @Fragment float4 color    = vis * lighting ;
+
+    override output @Pixel float4 myTarget = color + (myTarget @ OM_Dest) ;
+    override OM_DepthStencilState = myDepthStencilState;
+}
+
+
+shader class ForwardSpotLight extends GenerateSurfaceAttributes, SpotLight
+{}
+
+shader class GenShadowMap extends Base
+{
+    @Uniform float4x4 worldview = mul(world, view);
+    @Uniform float4x4 viewProj      = mul( view, proj );
+    @Uniform float4x4 worldViewProj = mul( world, viewProj );
+
+    @AssembledVertex PNU    fetched  = myVertexStream( IA_VertexID );
+    @AssembledVertex float3 P_model  = fetched.position;
+
+    override IA_DrawSpan = myDrawSpan;
+    override RS_Position = mul(float4(P_model, 1.0f), worldViewProj);
+}
+
+
 
 abstract mixin shader class PackGBuffer
     extends Base, SurfaceAttributes
@@ -206,3 +306,4 @@ abstract mixin shader class FullScreenTriangle extends D3D11DrawPass
 
 shader class DirectionalLightGBuffer extends FullScreenTriangle, UnpackGBuffer, DirectionalLight
 {}
+
