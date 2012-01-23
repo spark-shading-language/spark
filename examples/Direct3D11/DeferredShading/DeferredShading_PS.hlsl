@@ -163,7 +163,6 @@ struct GBuffer
 // Above values PLUS depth buffer (last element)
 Texture2D<float4> gGBufferTextures[4] : register(t2);
 
-
 float2 EncodeSphereMap(float3 n)
 {
     return n.xy * rsqrt(8.0f - 8.0f * n.z) + 0.5f;
@@ -236,7 +235,6 @@ SurfaceData ComputeSurfaceDataFromGBufferSample(uint2 positionViewport, uint sam
     rawData.albedo = gGBufferTextures[1].Load(uint3(positionViewport.xy, 0)).xyzw;
     rawData.positionZGrad = gGBufferTextures[2].Load(uint3(positionViewport.xy, 0)).xy;
     float zBuffer = gGBufferTextures[3].Load(uint3(positionViewport.xy, 0)).x;
-
 
     float2 gbufferDim;
     uint dummy;

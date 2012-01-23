@@ -241,6 +241,8 @@ void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice
     }
     else {
         d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), &mGBufferRTV.front(), mDepthBuffer->GetDepthStencil());
+        D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (mGBufferWidth), static_cast<FLOAT> (mGBufferHeight), 0.0f, 1.0f};
+        d3dDeviceContext->RSSetViewports(1, &viewPort);
     }
 
     RenderScene(d3dDeviceContext, NULL, mDepthBuffer->GetDepthStencil(), pDevice, 
@@ -249,7 +251,6 @@ void RenderGBuffer( ID3D11DeviceContext* d3dDeviceContext, ID3D11Device *pDevice
     if (!gUseSpark) {
         d3dDeviceContext->OMSetRenderTargets(static_cast<UINT>(mGBufferRTV.size()), gNullRTV, NULL);
     }
-
 }
 
 
@@ -757,6 +758,14 @@ HRESULT CALLBACK OnD3D11CreateDevice( ID3D11Device* pd3dDevice, const DXGI_SURFA
         false// Include stencil if using MSAA
         ));
 
+
+    // Shadow map related resources
+    mShadowMap = std::tr1::shared_ptr<Depth2D>(new Depth2D(
+        pd3dDevice, shadowMapWidth, shadowMapHeight,
+        D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE,
+        false// Include stencil if using MSAA
+        ));
+
     return S_OK;
 }
 
@@ -954,15 +963,22 @@ void GenerateShadowMap( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device*
 {
     float ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor );
-    pd3dImmediateContext->OMSetRenderTargets(0, gNullRTV, mShadowMap->GetDepthStencil());
+    ID3D11RenderTargetView* pNullRTV[] = {NULL};
+    pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, mShadowMap->GetDepthStencil());
     D3D11_VIEWPORT viewPort = {0.0f, 0.0f, static_cast<FLOAT> (shadowMapWidth), static_cast<FLOAT> (shadowMapHeight), 0.0f, 1.0f};
     pd3dImmediateContext->RSSetViewports(1, &viewPort);
+
+    if (gUseSpark) {
+        gForwardSpotLightSpark->SetMyTarget( NULL );
+        gForwardSpotLightSpark->SetShadowMap( NULL );
+        gForwardSpotLightSpark->SetMyDepthStencilState( NULL );
+    }
 
     // Generate the shadow map.
     pd3dImmediateContext->ClearDepthStencilView( mShadowMap->GetDepthStencil(), D3D11_CLEAR_DEPTH, 1.0, 0 );
     RenderScene(pd3dImmediateContext, pRTV, mShadowMap->GetDepthStencil(), 
-        pd3dDevice, g_pVertexShader, NULL, gGenShadowMapSpark, &g_SpotLight, &g_SpotLight, &g_mCenterMesh);
-    pd3dImmediateContext->OMSetRenderTargets(0, gNullRTV, NULL);
+        pd3dDevice, g_pVertexShader, NULL, gForwardSpotLightSpark, &g_SpotLight, &g_SpotLight, &g_mCenterMesh);
+    pd3dImmediateContext->OMSetRenderTargets(0, pNullRTV, NULL);
 }
 
 void RenderDeferred( ID3D11DeviceContext* pd3dImmediateContext, ID3D11Device* pd3dDevice ) 
